@@ -1,0 +1,125 @@
+# Source control
+.git/
+.gitignore
+.gitattributes
+
+# Development dependencies and tools
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Development environment
+.env*
+venv/
+env/
+ENV/
+
+# Build and development artifacts
+coverage/
+.nyc_output/
+.cache/
+.tmp/
+.temp/
+*.tmp
+*.temp
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+*.backup
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Documentation and non-essential files
+README.md
+CHANGELOG.md
+LICENSE
+*.md
+docs/
+documentation/
+
+# Development configuration
+.eslintrc*
+.prettierrc*
+jest.config.*
+cypress.json
+cypress/
+
+# Development scripts
+scripts/dev*
+scripts/test*
+
+# Testing files
+**/*.test.js
+**/*.test.ts
+**/*.spec.js
+**/*.spec.ts
+__tests__/
+test/
+tests/
+
+# Example and demo files
+examples/
+demo/
+demos/
+
+# Temporary build files
+.next/
+.nuxt/
+.docusaurus/
+
+# Claude AI files
+.claude/
+
+# Python files
+*.py
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large data files that shouldn't be in npm package
+data/
+dataset/
+datasets/
+models/
+*.csv
+*.h5
+*.pb
+*.tflite
+*.savedmodel/
+*.tfjs_model/
+*.json.gz
+*.parquet
+
+# Docker files
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# CI/CD files
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+azure-pipelines.yml
+
+# Logs
+logs/
+*.log
