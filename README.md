@@ -128,6 +128,15 @@ The AI uses a sophisticated neural network architecture:
 - ✅ Comprehensive error boundaries
 - ✅ Performance optimizations
 
+## 📋 Development Documentation
+
+For developers working with this codebase, see [`CLAUDE.md`](./CLAUDE.md) for comprehensive development guidance including:
+- Architecture overview and component structure
+- TensorFlow.js integration details and neural network architecture
+- Development patterns and best practices
+- Testing considerations and limitations
+- Memory management for ML operations
+
 ## 🤝 Contributing
 
 1. Fork the repository
