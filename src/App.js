@@ -35,12 +35,23 @@ const LoadingSpinner = () => (
   </div>
 );
 
-const StatCard = ({ label, value, color = "blue" }) => (
-  <div className={`bg-${color}-50 border border-${color}-100 rounded-lg p-4 text-center`}>
-    <div className={`text-2xl font-bold text-${color}-600`}>{value}</div>
-    <div className={`text-sm text-${color}-700`}>{label}</div>
-  </div>
-);
+// Color variants must be statically defined for Tailwind JIT
+const colorStyles = {
+  blue: { bg: 'bg-blue-50', border: 'border-blue-100', value: 'text-blue-600', label: 'text-blue-700' },
+  green: { bg: 'bg-green-50', border: 'border-green-100', value: 'text-green-600', label: 'text-green-700' },
+  red: { bg: 'bg-red-50', border: 'border-red-100', value: 'text-red-600', label: 'text-red-700' },
+  gray: { bg: 'bg-gray-50', border: 'border-gray-100', value: 'text-gray-600', label: 'text-gray-700' },
+};
+
+const StatCard = ({ label, value, color = "blue" }) => {
+  const styles = colorStyles[color] || colorStyles.blue;
+  return (
+    <div className={`${styles.bg} border ${styles.border} rounded-lg p-4 text-center`}>
+      <div className={`text-2xl font-bold ${styles.value}`}>{value}</div>
+      <div className={`text-sm ${styles.label}`}>{label}</div>
+    </div>
+  );
+};
 
 const App = () => {
   const [playerMove, setPlayerMove] = useState(null);
@@ -113,7 +124,7 @@ const App = () => {
       dummyInput.dispose();
       
       setModel(newModel);
-      setGameHistory([]);
+      // Note: Don't reset gameHistory here - useGameStorage handles loading saved data
       setMessage('🤖 AI ready! Choose Rock, Paper, or Scissors!');
       setModelAccuracy(0);
     } catch (err) {
@@ -125,15 +136,20 @@ const App = () => {
     }
   }, [createAdvancedModel]);
 
+  // Initialize model on mount only
   useEffect(() => {
     initializeModel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionally empty - only run on mount
+
+  // Cleanup model on unmount
+  useEffect(() => {
     return () => {
-      // Cleanup on unmount
       if (model) {
         model.dispose();
       }
     };
-  }, [initializeModel, model]);
+  }, [model]);
 
   const getCounterMove = useCallback((move) => {
     const moveIndex = MOVE_NAMES.indexOf(move);
@@ -164,15 +180,18 @@ const App = () => {
       return MOVE_NAMES[Math.floor(Math.random() * 3)];
     }
 
+    let input = null;
+    let prediction = null;
+    
     try {
       const sequence = encodeGameSequence(history, currentMove);
-      const input = tf.tensor2d([sequence]);
-      const prediction = model.predict(input);
+      input = tf.tensor2d([sequence]);
+      prediction = model.predict(input);
       const probabilities = await prediction.data();
       
       // Add some randomness to avoid being too predictable
       const randomFactor = 0.2;
-      const adjustedProbs = probabilities.map((p, i) => 
+      const adjustedProbs = probabilities.map((p) => 
         p * (1 - randomFactor) + (randomFactor / 3)
       );
       
@@ -180,14 +199,15 @@ const App = () => {
       const predictedMoveIndex = adjustedProbs.indexOf(Math.max(...adjustedProbs));
       const predictedMove = MOVE_NAMES[predictedMoveIndex];
       
-      input.dispose();
-      prediction.dispose();
-      
       // Return counter move to beat predicted player move
       return getCounterMove(predictedMove);
     } catch (err) {
       console.error("Prediction error:", err);
       return MOVE_NAMES[Math.floor(Math.random() * 3)];
+    } finally {
+      // Always dispose tensors to prevent memory leaks
+      if (input) input.dispose();
+      if (prediction) prediction.dispose();
     }
   }, [model, encodeGameSequence, getCounterMove]);
 

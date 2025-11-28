@@ -1,138 +1,88 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Development guide for the Rock Paper Scissors ML game.
 
-## Project Overview
+## Commands
 
-This is a sophisticated Rock Paper Scissors game built with React 19.0.0 and TensorFlow.js 4.22.0. The application features multiple AI strategies including a neural network that learns player patterns in real-time. The project uses modern React patterns with hooks, Tailwind CSS for styling, and localStorage for data persistence.
-
-## Common Commands
-
-### Development
 ```bash
-# Start development server
-npm start
-
-# Run tests (note: TensorFlow.js tests fail in JSDOM due to canvas limitations)
-npm test
-
-# Build for production
-npm run build
-
-# Install dependencies
-npm install
+npm start      # Dev server at localhost:3000
+npm test       # Jest tests (TensorFlow.js tests fail in JSDOM)
+npm run build  # Production build
 ```
 
-### Key Testing Considerations
-- Tests run with React Testing Library and Jest
-- TensorFlow.js integration causes canvas-related failures in JSDOM test environment
-- Tests that don't involve TensorFlow.js functionality should work normally
-- For ML-related testing, consider using headless browser environments
+## Architecture
 
-## Architecture Overview
+Single-page React app. All game logic in `src/App.js`.
 
-### Core Application Structure
-- **Single Page Application**: Built as a React SPA with the main game logic in `src/App.js`
-- **State Management**: Uses React hooks (`useState`, `useEffect`, `useCallback`, `useMemo`) with custom `useGameStorage` hook
-- **AI Engine**: TensorFlow.js neural network with multiple strategy modes (random, counter, pattern, learning)
-- **Data Persistence**: localStorage via custom hook for game history and statistics
+### Key Components
 
-### Key Components and Logic
+**App.js** - Main component containing:
+- Neural network model (TensorFlow.js sequential model)
+- Game state management (useState hooks)
+- AI strategy implementations
+- UI rendering
 
-#### Main App Component (`src/App.js`)
-- **Neural Network Architecture**: Multi-layer model with:
-  - Input: 15 features (5 moves × 3 dimensions: player move, AI move, result)
-  - Hidden layers: Dense(128) → Dropout(0.3) → Dense(64) → Dropout(0.2) → Dense(32)
-  - Output: Dense(3) with softmax for move probabilities
-  - Regularization: L2 regularization and dropout to prevent overfitting
+**hooks/useGameStorage.js** - localStorage persistence for game history
 
-- **AI Strategies**:
-  - `random`: Completely random moves
-  - `counter`: Counters the player's last move
-  - `pattern`: Analyzes last 3 moves for patterns
-  - `learning`: Uses neural network to predict and counter player moves
+### Neural Network
 
-- **Game Flow**:
-  1. Player selects move → `handlePlayerMove()`
-  2. AI strategy determines response
-  3. Results calculated and stored in `gameHistory`
-  4. Neural network trains on batch when using 'learning' strategy
-  5. Statistics and UI updated via React state
+```
+Input: 15 features (5 recent games × 3 values each)
+       - player move (0-1 normalized)
+       - AI move (0-1 normalized)  
+       - result (0-1 normalized)
 
-#### Data Storage Hook (`src/hooks/useGameStorage.js`)
-- Manages localStorage persistence for game history
-- Auto-saves on game history changes
-- Provides `clearStorage()` method for data reset
-- Storage key: `'tiny-ml-game-data'`
+Hidden: Dense(128, relu, L2, dropout 0.3)
+        Dense(64, relu, L2, dropout 0.2)
+        Dense(32, relu)
 
-### TensorFlow.js Integration Details
+Output: Dense(3, softmax) → probability for Rock/Paper/Scissors
+```
 
-#### Model Initialization
-- **Model Creation**: `createAdvancedModel()` builds the neural network
-- **Warm-up**: Dummy prediction run to initialize model
-- **Memory Management**: Proper tensor disposal to prevent memory leaks
-- **Error Handling**: Falls back to basic strategies if ML initialization fails
+Training: After each game when using "learning" strategy, trains on last 10 games with 20% validation split.
 
-#### Training Process
-- **Trigger**: Trains after each game when using 'learning' strategy and history ≥ 5 games
-- **Batch Size**: Uses last 10 games (`TRAINING_BATCH_SIZE`)
-- **Training Data**: Sequences of 5 moves encoded as normalized features
-- **Validation**: 20% validation split to monitor accuracy
-- **Performance**: Real-time accuracy tracking displayed to user
+### State Flow
 
-#### Prediction Logic
-- **Input Encoding**: `encodeGameSequence()` converts game history to model input
-- **Prediction**: Model predicts player's next move
-- **Strategy**: AI counters the predicted move
-- **Randomization**: 20% random factor to avoid being too predictable
+1. `initializeModel()` runs on mount, creates TensorFlow model
+2. `useGameStorage` loads saved game history from localStorage
+3. Player clicks move → `handlePlayerMove()`
+4. AI strategy calculates response
+5. Result added to `gameHistory`
+6. If "learning" mode: `trainModel()` runs async
+7. Stats recompute via `useMemo`
+8. History auto-saves to localStorage
 
-### Styling and UI
-- **Tailwind CSS**: Modern utility-first styling
-- **Responsive Design**: Mobile-friendly grid layouts
-- **Component Styling**: Reusable `StatCard` component for metrics
-- **Custom Theme**: Extended Tailwind config with primary colors
-- **Loading States**: Spinner components and disabled states during AI processing
+### Memory Management
 
-### Data Flow
-1. **Game History**: Array of game objects with `{ playerMove, aiMove, result, timestamp, id }`
-2. **Statistics**: Computed via `useMemo` for wins/losses/ties/winRate
-3. **Model State**: Tracks loading, training, accuracy, and error states
-4. **Persistence**: Auto-saves to localStorage on state changes
+TensorFlow.js tensors must be manually disposed. Pattern used:
 
-### Performance Considerations
-- **Memory Management**: Explicit tensor disposal in TensorFlow.js operations
-- **History Limits**: `MAX_HISTORY = 50` to prevent excessive memory usage
-- **Debounced Training**: 100ms delay before training to avoid blocking UI
-- **Memoization**: Strategic use of `useCallback` and `useMemo` for expensive operations
+```javascript
+let tensor = null;
+try {
+  tensor = tf.tensor2d(...);
+  // use tensor
+} finally {
+  if (tensor) tensor.dispose();
+}
+```
 
-### Error Handling
-- **ML Failures**: Graceful fallback to random strategy if neural network fails
-- **Storage Errors**: Console logging with continued functionality
-- **Training Errors**: Model continues working with previous weights
-- **Prediction Errors**: Falls back to random moves
+### Tailwind Note
 
-## Development Notes
+Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings instead (see `colorStyles` object in App.js).
 
-### Working with TensorFlow.js
-- Always dispose tensors after use to prevent memory leaks
-- Test ML functionality in browser environment, not Jest/JSDOM
-- Use `tf.ready()` before model operations
-- Handle async operations properly with loading states
+## Known Limitations
 
-### State Management Patterns
-- Use `useCallback` for functions passed as dependencies
-- Use `useMemo` for expensive computations (statistics)
-- Custom hooks for complex state logic (storage)
-- Proper cleanup in `useEffect` return functions
+- TensorFlow.js can't run in JSDOM, so ML tests require browser environment
+- Model is not persisted - resets on page refresh (only game history is saved)
+- Training is synchronous and can briefly block UI on slower devices
 
-### Adding New AI Strategies
-1. Add strategy key to `strategyDescriptions` object
-2. Implement logic in `handlePlayerMove()` switch statement
-3. Consider training requirements and data dependencies
-4. Test fallback behavior for edge cases
+## Adding Features
 
-### Modifying Neural Network
-- Update `createAdvancedModel()` for architecture changes
-- Adjust `encodeGameSequence()` if input format changes
-- Update training parameters in `trainModel()`
-- Consider backward compatibility with existing saved models
+**New AI strategy:**
+1. Add to `strategyDescriptions` object
+2. Add case in `handlePlayerMove()` switch
+
+**Modify network architecture:**
+1. Update `createAdvancedModel()`
+2. Adjust `encodeGameSequence()` if input shape changes
+3. Update input shape constant (currently `[15]`)

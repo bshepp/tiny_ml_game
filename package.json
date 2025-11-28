@@ -1,23 +1,12 @@
 {
   "name": "tiny-ml-game",
   "version": "1.0.0",
-  "description": "A sophisticated Rock Paper Scissors game featuring AI opponents powered by TensorFlow.js machine learning",
+  "description": "Rock Paper Scissors with TensorFlow.js ML opponent",
   "private": true,
-  "author": "Claude AI Assistant",
   "license": "MIT",
-  "keywords": [
-    "react",
-    "tensorflow",
-    "machine-learning",
-    "ai",
-    "game",
-    "rock-paper-scissors",
-    "neural-network",
-    "browser-ml"
-  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/user/tiny-ml-game.git"
+    "url": "https://github.com/bshepp/tiny_ml_game.git"
   },
   "homepage": ".",
   "dependencies": {
