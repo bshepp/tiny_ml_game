@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/bshepp/tiny_ml_game.git"
   },
-  "homepage": ".",
+  "homepage": "https://bshepp.github.io/tiny_ml_game",
   "dependencies": {
     "@tensorflow/tfjs": "^4.22.0",
     "@testing-library/dom": "^10.4.0",
@@ -24,7 +24,9 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
@@ -46,6 +48,7 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
+    "gh-pages": "^6.3.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17"
   }
