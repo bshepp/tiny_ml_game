@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { useGameStorage } from './hooks/useGameStorage';
+import { useModelStorage } from './hooks/useModelStorage';
 import './App.css';
 
 const MOVES = ['Rock', '🗿', 'Paper', '📄', 'Scissors', '✂️'];
@@ -64,9 +65,21 @@ const App = () => {
   const [error, setError] = useState(null);
   const [isTraining, setIsTraining] = useState(false);
   const [modelAccuracy, setModelAccuracy] = useState(0);
+  const [modelStatus, setModelStatus] = useState('new'); // 'new', 'loaded', 'trained'
   
   // Add data persistence
   const { clearStorage } = useGameStorage(gameHistory, setGameHistory);
+  
+  // Add model persistence
+  const { 
+    saveModel, 
+    loadModel, 
+    deleteModel,
+    isSaving, 
+    isLoadingModel, 
+    hasSavedModel, 
+    lastSaved 
+  } = useModelStorage();
 
   const createAdvancedModel = useCallback(() => {
     const sequenceModel = tf.sequential();
@@ -109,24 +122,43 @@ const App = () => {
     return sequenceModel;
   }, []);
 
-  const initializeModel = useCallback(async () => {
+  const initializeModel = useCallback(async (forceNew = false) => {
     setIsLoading(true);
     setError(null);
     
     try {
       await tf.ready();
-      const newModel = createAdvancedModel();
+      
+      let loadedModel = null;
+      
+      // Try to load a saved model first (unless forceNew is true)
+      if (!forceNew) {
+        try {
+          loadedModel = await loadModel();
+        } catch (err) {
+          console.log('No saved model to load, creating new one');
+        }
+      }
+      
+      let activeModel;
+      if (loadedModel) {
+        activeModel = loadedModel;
+        setModelStatus('loaded');
+        setMessage('🧠 Loaded trained AI model! Choose Rock, Paper, or Scissors!');
+      } else {
+        activeModel = createAdvancedModel();
+        setModelStatus('new');
+        setMessage('🤖 AI ready! Choose Rock, Paper, or Scissors!');
+        setModelAccuracy(0);
+      }
       
       // Warm up the model with dummy data
       const dummyInput = tf.zeros([1, 15]);
-      const warmup = newModel.predict(dummyInput);
+      const warmup = activeModel.predict(dummyInput);
       warmup.dispose();
       dummyInput.dispose();
       
-      setModel(newModel);
-      // Note: Don't reset gameHistory here - useGameStorage handles loading saved data
-      setMessage('🤖 AI ready! Choose Rock, Paper, or Scissors!');
-      setModelAccuracy(0);
+      setModel(activeModel);
     } catch (err) {
       console.error("Error initializing model:", err);
       setError("Failed to initialize AI model. Falling back to basic strategies.");
@@ -134,7 +166,7 @@ const App = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [createAdvancedModel]);
+  }, [createAdvancedModel, loadModel]);
 
   // Initialize model on mount only
   useEffect(() => {
@@ -251,7 +283,14 @@ const App = () => {
 
         const accuracy = trainResult.history.acc || trainResult.history.accuracy;
         if (accuracy && accuracy.length > 0) {
-          setModelAccuracy(Math.round(accuracy[accuracy.length - 1] * 100));
+          const newAccuracy = Math.round(accuracy[accuracy.length - 1] * 100);
+          setModelAccuracy(newAccuracy);
+          setModelStatus('trained');
+          
+          // Auto-save every 10 games when using learning mode
+          if (history.length % 10 === 0 && history.length >= 10) {
+            saveModel(model);
+          }
         }
 
         xs.dispose();
@@ -262,7 +301,7 @@ const App = () => {
     } finally {
       setIsTraining(false);
     }
-  }, [model, encodeGameSequence, isTraining]);
+  }, [model, encodeGameSequence, isTraining, saveModel]);
 
   const handlePlayerMove = useCallback(async (move) => {
     setPlayerMove(move);
@@ -311,11 +350,10 @@ const App = () => {
     setAiMove(aiChoice);
     
     // Determine winner
-    let result, resultMessage, emoji;
+    let result, resultMessage;
     if (move === aiChoice) {
       result = "tie";
       resultMessage = "It's a tie! 🤝";
-      emoji = "🤝";
     } else if (
       (move === 'Rock' && aiChoice === 'Scissors') ||
       (move === 'Scissors' && aiChoice === 'Paper') ||
@@ -323,11 +361,9 @@ const App = () => {
     ) {
       result = "win";
       resultMessage = 'You win! 🎉';
-      emoji = "🎉";
     } else {
       result = "loss";
       resultMessage = 'AI wins! 🤖';
-      emoji = "🤖";
     }
     
     setMessage(resultMessage);
@@ -461,10 +497,27 @@ const App = () => {
                   <span className="text-sm font-medium text-purple-700">AI Model Accuracy</span>
                   <span className="text-lg font-bold text-purple-600">{modelAccuracy}%</span>
                 </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-purple-600">
+                    Status: {modelStatus === 'loaded' ? '📂 Loaded from storage' : 
+                             modelStatus === 'trained' ? '🎓 Trained' : '🆕 New model'}
+                  </span>
+                </div>
                 {isTraining && (
                   <div className="flex items-center mt-2">
                     <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-600 mr-2"></div>
                     <span className="text-xs text-purple-600">Training...</span>
+                  </div>
+                )}
+                {isSaving && (
+                  <div className="flex items-center mt-2">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-green-600 mr-2"></div>
+                    <span className="text-xs text-green-600">Saving model...</span>
+                  </div>
+                )}
+                {lastSaved && !isSaving && (
+                  <div className="text-xs text-gray-500 mt-2">
+                    💾 Last saved: {new Date(lastSaved).toLocaleString()}
                   </div>
                 )}
               </div>
@@ -491,8 +544,31 @@ const App = () => {
             </div>
             
             <div className="space-y-2">
+              {aiStrategy === 'learning' && (
+                <>
+                  <button
+                    onClick={() => saveModel(model)}
+                    disabled={!model || isSaving || isTraining}
+                    className="w-full px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? '💾 Saving...' : '💾 Save Model'}
+                  </button>
+                  {hasSavedModel && (
+                    <button
+                      onClick={async () => {
+                        await deleteModel();
+                        initializeModel(true);
+                      }}
+                      disabled={isLoadingModel}
+                      className="w-full px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50"
+                    >
+                      🗑️ Delete Saved Model
+                    </button>
+                  )}
+                </>
+              )}
               <button
-                onClick={initializeModel}
+                onClick={() => initializeModel(true)}
                 className="w-full px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
               >
                 🔄 Reset AI Model

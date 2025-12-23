@@ -59,6 +59,8 @@ npm run build # Production build
 ## Notes
 
 - Game history is saved to localStorage and persists between sessions
+- **Trained neural network model is saved to IndexedDB** and persists between sessions
+- Model auto-saves every 10 games when using "Learning" strategy
 - Maximum 50 games stored to limit memory usage
 - The neural network runs entirely in-browser - no server required
 - If ML initialization fails, the app falls back to random strategy

@@ -70,10 +70,36 @@ try {
 
 Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings instead (see `colorStyles` object in App.js).
 
+## Testing
+
+TensorFlow.js is mocked in `src/__mocks__/@tensorflow/tfjs.js` for Jest/JSDOM compatibility. The mock provides stub implementations for all TF.js APIs used in the app, allowing component tests to run without WebGL/WebAssembly.
+
+## Model Persistence
+
+The trained neural network model is saved to IndexedDB using TensorFlow.js's built-in model saving:
+
+- **Auto-save**: Model auto-saves every 10 games when using "learning" strategy
+- **Manual save**: "Save Model" button in the UI
+- **Load on startup**: Automatically loads saved model if available
+- **Storage location**: IndexedDB (`indexeddb://tiny-ml-game-model`)
+- **Metadata**: Model metadata stored in localStorage (`tiny-ml-game-model-meta`)
+
+### useModelStorage Hook
+
+```javascript
+const { 
+  saveModel,      // Save current model to IndexedDB
+  loadModel,      // Load saved model (returns null if none)
+  deleteModel,    // Delete saved model
+  isSaving,       // Boolean: save in progress
+  isLoadingModel, // Boolean: load in progress  
+  hasSavedModel,  // Boolean: saved model exists
+  lastSaved       // ISO timestamp of last save
+} = useModelStorage();
+```
+
 ## Known Limitations
 
-- TensorFlow.js can't run in JSDOM, so ML tests require browser environment
-- Model is not persisted - resets on page refresh (only game history is saved)
 - Training is synchronous and can briefly block UI on slower devices
 
 ## Adding Features
