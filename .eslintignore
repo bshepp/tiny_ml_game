@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+build/
+dist/
+coverage/
+.nyc_output/
+
+# Cache files
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# Generated files
+public/
+*.generated.js
+*.generated.ts
+
+# Vendor directories
+vendor/
+third_party/
+
+# Configuration files that may have different standards
+*.config.js
+*.config.ts
+webpack.config.js
+tailwind.config.js
+
+# Service Worker
+sw.js
+workbox-*.js
+
+# Environment files
+.env*
+
+# Python files in venv
+venv/
+
+# Test coverage reports
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Legacy browser builds
+*.umd.js
+*.es5.js
+
+# Minified files
+*.min.js
+*.min.css
+
+# Bundle analysis
+bundle-analyzer-report.html
+stats.json
+
+# IDE files
+.vscode/
+.idea/

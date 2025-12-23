@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/tiny_ml_game/static/css/main.89ec4438.css",
+    "main.js": "/tiny_ml_game/static/js/main.d2a9f1e3.js",
+    "static/js/453.79fb2dc0.chunk.js": "/tiny_ml_game/static/js/453.79fb2dc0.chunk.js",
+    "index.html": "/tiny_ml_game/index.html",
+    "main.89ec4438.css.map": "/tiny_ml_game/static/css/main.89ec4438.css.map",
+    "main.d2a9f1e3.js.map": "/tiny_ml_game/static/js/main.d2a9f1e3.js.map",
+    "453.79fb2dc0.chunk.js.map": "/tiny_ml_game/static/js/453.79fb2dc0.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.89ec4438.css",
+    "static/js/main.d2a9f1e3.js"
+  ]
+}
