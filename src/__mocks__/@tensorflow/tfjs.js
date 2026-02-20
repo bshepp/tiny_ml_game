@@ -118,4 +118,5 @@ const tf = {
 };
 
 module.exports = tf;
+module.exports.__esModule = true;
 module.exports.default = tf;

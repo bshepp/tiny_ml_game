@@ -1,38 +1,14 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # Dependencies
 /node_modules
-/.pnp
-.pnp.js
-/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
 
 # Testing
 /coverage
-/.nyc_output
-/cypress/videos
-/cypress/screenshots
 
 # Production builds
 /build
-/dist
-/.next/
-/out/
-/.nuxt
-/docs/.vitepress/dist
-/.vuepress/dist
-/.docusaurus/build
-/storybook-static
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
 
 # Environment variables
 .env
@@ -40,23 +16,11 @@ pids
 .env.development.local
 .env.test.local
 .env.production.local
-.env*.local
 
-# Cache and temporary files
+# Cache
 .cache/
-.tmp/
-.temp/
-*.tmp
-*.temp
 .eslintcache
-.stylelintcache
 *.tsbuildinfo
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-*.tgz
-*.tar.gz
-*.zip
 
 # Editor directories and files
 .vscode/
@@ -67,116 +31,16 @@ pids
 
 # OS generated files
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-Desktop.ini
 
-# Python virtual environment
-venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# TensorFlow.js models and data
+# TensorFlow.js model files
 /models/
 *.pb
 *.h5
 *.tflite
-*.savedmodel/
-*.tfjs_model/
 
-# Machine Learning datasets
-/data/
-/dataset/
-/datasets/
-*.csv
-*.json.gz
-*.parquet
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Optional REPL history
-.node_repl_history
-
-# Optional npm cache directory
-.npm
-
-# Optional ESLint cache
-.eslintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
-.node_repl_history
-
-# Yarn Integrity file
-.yarn-integrity
-
-# dotenv environment variable files
-.env.development
-.env.test
-.env.production
-
-# parcel-bundler cache (https://parceljs.org/)
-.parcel-cache
-
-# Next.js build output
-.next
-
-# Nuxt.js build / generate output
-.nuxt
-
-# Gatsby files
-.cache/
-public
-
-# Storybook build outputs
-.out
-.storybook-out
-
-# Temporary folders
-tmp/
-temp/
-
-# Claude AI files (if any)
+# Claude AI
 .claude/
 
-# Editor backup files
-*~
-*.bak
-*.backup
-
 # Log files
-logs/
 *.log
-
-# Runtime
-*.pid
-*.seed
-
-# Security
-*.pem
-*.key
-*.crt
-
-# Dependency directories for other package managers
-jspm_packages/
-
-# Optional REPL history for Node.js
-.node_repl_history

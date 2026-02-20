@@ -4,8 +4,8 @@ import { useGameStorage } from './hooks/useGameStorage';
 import { useModelStorage } from './hooks/useModelStorage';
 import './App.css';
 
-const MOVES = ['Rock', '🗿', 'Paper', '📄', 'Scissors', '✂️'];
 const MOVE_NAMES = ['Rock', 'Paper', 'Scissors'];
+const MOVE_EMOJI = { Rock: '🗿', Paper: '📄', Scissors: '✂️' };
 const MAX_HISTORY = 50;
 const TRAINING_BATCH_SIZE = 10;
 
@@ -413,20 +413,10 @@ const App = () => {
     learning: "🤖 Neural network learns your style"
   };
 
-  if (error && !model) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <GameError message={error} onRetry={initializeModel} />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-4xl mx-auto">
-        {error && <GameError message={error} />}
+        {error && <GameError message={error} onRetry={() => initializeModel()} />}
         
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
           <div className="text-center mb-6">
@@ -456,7 +446,7 @@ const App = () => {
                 disabled={isLoading}
                 className="group flex flex-col items-center p-6 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
-                <span className="text-4xl mb-2">{MOVES[idx * 2 + 1]}</span>
+                <span className="text-4xl mb-2">{MOVE_EMOJI[move]}</span>
                 <span className="text-lg font-medium">{move}</span>
               </button>
             ))}
@@ -466,13 +456,13 @@ const App = () => {
             <div className="bg-gray-50 rounded-lg p-6 mb-6">
               <div className="flex justify-center items-center space-x-8">
                 <div className="text-center">
-                  <div className="text-6xl mb-2">{MOVES[MOVE_NAMES.indexOf(playerMove) * 2 + 1]}</div>
+                  <div className="text-6xl mb-2">{MOVE_EMOJI[playerMove]}</div>
                   <div className="text-lg font-medium text-gray-700">You chose</div>
                   <div className="text-xl font-bold text-blue-600">{playerMove}</div>
                 </div>
                 <div className="text-4xl">VS</div>
                 <div className="text-center">
-                  <div className="text-6xl mb-2">{MOVES[MOVE_NAMES.indexOf(aiMove) * 2 + 1]}</div>
+                  <div className="text-6xl mb-2">{MOVE_EMOJI[aiMove]}</div>
                   <div className="text-lg font-medium text-gray-700">AI chose</div>
                   <div className="text-xl font-bold text-red-600">{aiMove}</div>
                 </div>
@@ -527,20 +517,26 @@ const App = () => {
           <div className="bg-white rounded-2xl shadow-lg p-6">
             <h3 className="text-xl font-bold text-gray-800 mb-4">🤖 AI Strategy</h3>
             <div className="space-y-2 mb-4">
-              {Object.entries(strategyDescriptions).map(([strategy, description]) => (
-                <button
-                  key={strategy}
-                  onClick={() => setAiStrategy(strategy)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    aiStrategy === strategy
-                      ? 'bg-purple-100 border-2 border-purple-300 text-purple-800'
-                      : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="font-medium capitalize">{strategy}</div>
-                  <div className="text-sm text-gray-600">{description}</div>
-                </button>
-              ))}
+              {Object.entries(strategyDescriptions).map(([strategy, description]) => {
+                const needsModel = strategy === 'learning' && !model;
+                return (
+                  <button
+                    key={strategy}
+                    onClick={() => setAiStrategy(strategy)}
+                    disabled={needsModel}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${
+                      aiStrategy === strategy
+                        ? 'bg-purple-100 border-2 border-purple-300 text-purple-800'
+                        : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+                    } ${needsModel ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="font-medium capitalize">{strategy}</div>
+                    <div className="text-sm text-gray-600">
+                      {description}{needsModel && ' (model unavailable)'}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
             
             <div className="space-y-2">
@@ -591,9 +587,9 @@ const App = () => {
                 {gameHistory.slice(-10).reverse().map((game) => (
                   <div key={game.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-4">
-                      <span className="text-2xl">{MOVES[MOVE_NAMES.indexOf(game.playerMove) * 2 + 1]}</span>
-                      <span className="text-sm text-gray-500">vs</span>
-                      <span className="text-2xl">{MOVES[MOVE_NAMES.indexOf(game.aiMove) * 2 + 1]}</span>
+<span className="text-2xl">{MOVE_EMOJI[game.playerMove]}</span>
+                    <span className="text-sm text-gray-500">vs</span>
+                      <span className="text-2xl">{MOVE_EMOJI[game.aiMove]}</span>
                     </div>
                     <div className="text-center">
                       <span className={`font-bold ${

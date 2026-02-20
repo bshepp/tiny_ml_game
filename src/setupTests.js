@@ -7,13 +7,16 @@ import '@testing-library/jest-dom';
 // Mock TensorFlow.js for JSDOM environment
 jest.mock('@tensorflow/tfjs');
 
-// Suppress console errors from TensorFlow during tests
+// Suppress console errors from TensorFlow and model initialization during tests.
+// These are expected in JSDOM since WebGL/WebAssembly aren't available.
 const originalError = console.error;
 beforeAll(() => {
   console.error = (...args) => {
     if (
       typeof args[0] === 'string' &&
-      (args[0].includes('TensorFlow') || args[0].includes('WebGL'))
+      (args[0].includes('TensorFlow') ||
+        args[0].includes('WebGL') ||
+        args[0].includes('Error initializing model'))
     ) {
       return;
     }

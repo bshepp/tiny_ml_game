@@ -3,76 +3,22 @@ node_modules/
 
 # Build outputs
 build/
-dist/
 coverage/
-.nyc_output/
 
-# Generated files
-*.generated.js
-*.generated.ts
-*.generated.css
-*.generated.scss
-
-# Package files
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-
-# Cache and temporary files
-.cache/
-*.cache
-.tmp/
-.temp/
-*.tmp
-*.temp
-
-# Public assets (often have specific formatting)
-public/
-assets/
-
-# Configuration files with specific formatting requirements
-.eslintrc*
-.prettierrc*
-*.config.js
-*.config.ts
-
-# Minified files
+# Generated / vendor
 *.min.js
 *.min.css
-*.min.html
 
-# Vendor and third-party files
-vendor/
-third_party/
+# Package lock
+package-lock.json
 
-# TensorFlow.js model files (binary/specific format)
+# Public assets
+public/
+
+# Config files
+*.config.js
+
+# TensorFlow.js model files
 *.pb
 *.h5
 *.tflite
-*.savedmodel/
-*.tfjs_model/
-
-# Data files
-*.csv
-*.json.gz
-*.parquet
-
-# Python virtual environment
-venv/
-
-# Git files
-.git/
-
-# IDE files
-.vscode/
-.idea/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Log files
-*.log
-
-# Environment files
-.env*

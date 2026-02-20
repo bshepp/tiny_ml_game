@@ -1,6 +1,6 @@
 # Rock Paper Scissors with ML
 
-A browser-based Rock Paper Scissors game where you can play against AI opponents, including one that learns your playing patterns using TensorFlow.js.
+A browser-based Rock Paper Scissors game where you play against AI opponents, including a neural network that learns your playing patterns using TensorFlow.js. Everything runs client-side -- no server required.
 
 ## Quick Start
 
@@ -28,13 +28,20 @@ The neural network:
 - Plays the counter to that prediction
 - Retrains after every game
 
-Architecture: `Dense(128) → Dropout → Dense(64) → Dropout → Dense(32) → Softmax(3)`
+Architecture: `Dense(128, relu, L2) → Dropout(0.3) → Dense(64, relu, L2) → Dropout(0.2) → Dense(32, relu) → Softmax(3)`
 
-The AI gets better at predicting you over time, but includes 20% randomization to avoid being too predictable itself.
+The AI includes 20% randomization to avoid being too predictable itself.
+
+## Persistence
+
+- **Game history** is saved to localStorage and persists between sessions (max 50 games)
+- **Trained model** is saved to IndexedDB and reloaded on next visit
+- Model auto-saves every 10 games when using "Learning" strategy
+- Manual save/delete controls available in the UI
 
 ## Tech Stack
 
-- React 19
+- React 19 (Create React App)
 - TensorFlow.js 4.22
 - Tailwind CSS 3
 
@@ -42,28 +49,34 @@ The AI gets better at predicting you over time, but includes 20% randomization t
 
 ```
 src/
-├── App.js                 # Main game component + ML logic
+├── App.js                          # Game component, ML logic, and UI
 ├── hooks/
-│   └── useGameStorage.js  # localStorage persistence
-└── index.js               # Entry point
+│   ├── useGameStorage.js           # localStorage persistence for game history
+│   └── useModelStorage.js          # IndexedDB persistence for trained model
+├── __mocks__/@tensorflow/tfjs.js   # TensorFlow.js mock for tests
+├── App.test.js                     # Component and integration tests
+├── index.js                        # Entry point
+├── index.css                       # Tailwind directives
+├── App.css                         # Custom animations
+└── setupTests.js                   # Jest setup + TF.js mock config
 ```
 
 ## Development
 
 ```bash
-npm start     # Dev server
-npm test      # Tests (note: TensorFlow tests fail in JSDOM)
-npm run build # Production build
+npm start       # Dev server at localhost:3000
+npm test        # Jest tests (TF.js mocked for JSDOM)
+npm run build   # Production build
+npm run deploy  # Deploy to GitHub Pages
 ```
+
+No environment variables or API keys required.
 
 ## Notes
 
-- Game history is saved to localStorage and persists between sessions
-- **Trained neural network model is saved to IndexedDB** and persists between sessions
-- Model auto-saves every 10 games when using "Learning" strategy
-- Maximum 50 games stored to limit memory usage
-- The neural network runs entirely in-browser - no server required
-- If ML initialization fails, the app falls back to random strategy
+- The neural network runs entirely in-browser -- no server required
+- If ML initialization fails, the game remains playable with non-ML strategies (random, counter, pattern)
+- TensorFlow.js is fully mocked in tests for JSDOM compatibility
 
 ## License
 
