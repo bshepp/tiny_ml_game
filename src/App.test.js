@@ -92,6 +92,14 @@ describe('App Component', () => {
   });
 
   test('disables learning strategy when model is unavailable', async () => {
+    // Force model initialization to fail so we deterministically exercise
+    // the fallback UI (rather than relying on an incidental JSDOM error).
+    const tf = require('@tensorflow/tfjs');
+    tf.loadLayersModel.mockRejectedValueOnce(new Error('not found'));
+    tf.sequential.mockImplementationOnce(() => {
+      throw new Error('test: model unavailable');
+    });
+
     render(<App />);
 
     await waitFor(() => {

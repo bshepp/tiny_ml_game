@@ -37,7 +37,11 @@ Hidden: Dense(128, relu, L2, dropout 0.3)
 Output: Dense(3, softmax) → probability for Rock/Paper/Scissors
 ```
 
-Training: After each game in "learning" strategy, trains on last 10 games with 20% validation split.
+Training: After each game in "learning" strategy, trains on the last 10 games with a 20% validation split. Each sample uses only the games that preceded it as context, so the label isn't leaked into the input.
+
+### Prediction Sampling
+
+`predictNextMove` does not use `argmax`. It blends model probabilities with a uniform distribution (20% randomness) and then samples from the resulting distribution. Without sampling, the AI would be deterministic for a given history and the "random factor" would have no effect.
 
 ### State Flow
 
@@ -108,21 +112,26 @@ The trained neural network model is saved to IndexedDB using TensorFlow.js's bui
 
 ```javascript
 const {
-  saveModel,       // Save current model to IndexedDB
-  loadModel,       // Load saved model (returns null if none)
-  deleteModel,     // Delete saved model
-  isSaving,        // Boolean: save in progress
-  isLoadingModel,  // Boolean: load in progress
-  hasSavedModel,   // Boolean: saved model exists
-  lastSaved        // ISO timestamp of last save
+  saveModel,         // Save current model to IndexedDB
+  loadModel,         // Load saved model (returns null if none)
+  deleteModel,       // Delete saved model
+  checkModelExists,  // Sync hasSavedModel state with IndexedDB contents
+  isSaving,          // Boolean: save in progress
+  isLoadingModel,    // Boolean: load in progress
+  hasSavedModel,     // Boolean: saved model exists
+  lastSaved          // ISO timestamp of last save
 } = useModelStorage();
 ```
 
 ## Known Limitations
 
 - Training is synchronous and can briefly block UI on slower devices
-- All game logic lives in App.js (~600 lines) — could benefit from decomposition
+- All game logic lives in App.js (~700 lines) — could benefit from decomposition
 - TF.js model initialization has a CJS/ESM interop issue in JSDOM that causes fallback to non-ML mode in tests
+
+## Storage Hooks
+
+`useGameStorage` uses a `hasLoadedRef` guard to skip the first save effect. Without it, the save effect would run on mount with the empty default state and overwrite persisted history before the load effect completed.
 
 ## Adding Features
 

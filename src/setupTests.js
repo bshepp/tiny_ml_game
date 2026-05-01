@@ -16,7 +16,8 @@ beforeAll(() => {
       typeof args[0] === 'string' &&
       (args[0].includes('TensorFlow') ||
         args[0].includes('WebGL') ||
-        args[0].includes('Error initializing model'))
+        args[0].includes('Error initializing model') ||
+        args[0].includes('Error checking for saved model'))
     ) {
       return;
     }

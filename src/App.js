@@ -71,15 +71,22 @@ const App = () => {
   const { clearStorage } = useGameStorage(gameHistory, setGameHistory);
   
   // Add model persistence
-  const { 
-    saveModel, 
-    loadModel, 
+  const {
+    saveModel,
+    loadModel,
     deleteModel,
-    isSaving, 
-    isLoadingModel, 
-    hasSavedModel, 
-    lastSaved 
+    checkModelExists,
+    isSaving,
+    isLoadingModel,
+    hasSavedModel,
+    lastSaved
   } = useModelStorage();
+
+  // Sync hasSavedModel with the actual IndexedDB contents on mount,
+  // so stale localStorage metadata can't claim a model that no longer exists.
+  useEffect(() => {
+    checkModelExists();
+  }, [checkModelExists]);
 
   const createAdvancedModel = useCallback(() => {
     const sequenceModel = tf.sequential();
@@ -188,7 +195,7 @@ const App = () => {
     return MOVE_NAMES[(moveIndex + 1) % 3]; // Rock -> Paper, Paper -> Scissors, Scissors -> Rock
   }, []);
 
-  const encodeGameSequence = useCallback((history, currentMove) => {
+  const encodeGameSequence = useCallback((history) => {
     const sequence = new Array(15).fill(0); // 5 moves × 3 dimensions
     const recentMoves = history.slice(-5);
     
@@ -207,7 +214,7 @@ const App = () => {
     return sequence;
   }, []);
 
-  const predictNextMove = useCallback(async (history, currentMove) => {
+  const predictNextMove = useCallback(async (history) => {
     if (!model || history.length < 3) {
       return MOVE_NAMES[Math.floor(Math.random() * 3)];
     }
@@ -216,19 +223,28 @@ const App = () => {
     let prediction = null;
     
     try {
-      const sequence = encodeGameSequence(history, currentMove);
+      const sequence = encodeGameSequence(history);
       input = tf.tensor2d([sequence]);
       prediction = model.predict(input);
       const probabilities = await prediction.data();
       
-      // Add some randomness to avoid being too predictable
+      // Mix model probabilities with a uniform distribution, then sample.
+      // Sampling (rather than argmax) is what actually injects randomness so
+      // the AI isn't perfectly deterministic for a given history.
       const randomFactor = 0.2;
-      const adjustedProbs = probabilities.map((p) => 
+      const adjustedProbs = Array.from(probabilities, (p) =>
         p * (1 - randomFactor) + (randomFactor / 3)
       );
-      
-      // Select move based on adjusted probabilities
-      const predictedMoveIndex = adjustedProbs.indexOf(Math.max(...adjustedProbs));
+      const total = adjustedProbs.reduce((s, p) => s + p, 0) || 1;
+      let r = Math.random() * total;
+      let predictedMoveIndex = adjustedProbs.length - 1;
+      for (let i = 0; i < adjustedProbs.length; i++) {
+        r -= adjustedProbs[i];
+        if (r <= 0) {
+          predictedMoveIndex = i;
+          break;
+        }
+      }
       const predictedMove = MOVE_NAMES[predictedMoveIndex];
       
       // Return counter move to beat predicted player move
@@ -252,49 +268,53 @@ const App = () => {
     
     try {
       const trainingData = history.slice(-TRAINING_BATCH_SIZE);
+      const startIdx = history.length - trainingData.length;
       const inputs = [];
       const labels = [];
 
       trainingData.forEach((game, idx) => {
-        if (idx > 0) {
-          const prevHistory = history.slice(0, history.indexOf(game));
-          const sequence = encodeGameSequence(prevHistory, game.playerMove);
-          const playerMoveIdx = MOVE_NAMES.indexOf(game.playerMove);
-          
-          if (playerMoveIdx !== -1) {
-            inputs.push(sequence);
-            const label = new Array(3).fill(0);
-            label[playerMoveIdx] = 1;
-            labels.push(label);
-          }
+        // Use only games up to (but not including) this one as the
+        // sequence context, so the label isn't leaked into the input.
+        const prevHistory = history.slice(0, startIdx + idx);
+        const sequence = encodeGameSequence(prevHistory);
+        const playerMoveIdx = MOVE_NAMES.indexOf(game.playerMove);
+
+        if (playerMoveIdx !== -1) {
+          inputs.push(sequence);
+          const label = new Array(3).fill(0);
+          label[playerMoveIdx] = 1;
+          labels.push(label);
         }
       });
 
       if (inputs.length > 0) {
         const xs = tf.tensor2d(inputs);
         const ys = tf.tensor2d(labels);
-        
-        const trainResult = await model.fit(xs, ys, {
-          epochs: 3,
-          batchSize: Math.min(inputs.length, 8),
-          verbose: 0,
-          validationSplit: 0.2
-        });
 
-        const accuracy = trainResult.history.acc || trainResult.history.accuracy;
-        if (accuracy && accuracy.length > 0) {
-          const newAccuracy = Math.round(accuracy[accuracy.length - 1] * 100);
-          setModelAccuracy(newAccuracy);
-          setModelStatus('trained');
-          
-          // Auto-save every 10 games when using learning mode
-          if (history.length % 10 === 0 && history.length >= 10) {
-            saveModel(model);
+        try {
+          const trainResult = await model.fit(xs, ys, {
+            epochs: 3,
+            batchSize: Math.min(inputs.length, 8),
+            verbose: 0,
+            validationSplit: 0.2
+          });
+
+          const accuracy = trainResult.history.acc || trainResult.history.accuracy;
+          if (accuracy && accuracy.length > 0) {
+            const newAccuracy = Math.round(accuracy[accuracy.length - 1] * 100);
+            setModelAccuracy(newAccuracy);
+            setModelStatus('trained');
           }
+        } finally {
+          xs.dispose();
+          ys.dispose();
         }
 
-        xs.dispose();
-        ys.dispose();
+        // Auto-save every 10 games when using learning mode, regardless of
+        // whether this round produced an accuracy value.
+        if (history.length >= 10 && history.length % 10 === 0) {
+          saveModel(model);
+        }
       }
     } catch (err) {
       console.error("Training error:", err);
@@ -323,7 +343,7 @@ const App = () => {
           break;
           
         case 'learning':
-          aiChoice = await predictNextMove(gameHistory, move);
+          aiChoice = await predictNextMove(gameHistory);
           break;
           
         case 'pattern':

@@ -109,19 +109,20 @@ export const useModelStorage = () => {
   }, []);
 
   /**
-   * Check if a saved model exists
+   * Check if a saved model exists in IndexedDB and sync local state with it.
+   * Useful on mount to detect models that were removed externally.
    */
   const checkModelExists = useCallback(async () => {
     try {
       const models = await tf.io.listModels();
       const exists = !!models[MODEL_STORAGE_KEY];
       setHasSavedModel(exists);
-      
+
       if (!exists) {
         localStorage.removeItem(MODEL_META_KEY);
         setLastSaved(null);
       }
-      
+
       return exists;
     } catch (error) {
       console.error('Error checking for saved model:', error);
