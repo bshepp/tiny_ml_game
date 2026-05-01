@@ -33,7 +33,7 @@ const createMockModel = () => {
 };
 
 const mockLayer = {
-  apply: jest.fn(),
+  apply: jest.fn(function () { return this; }),
   getWeights: jest.fn().mockReturnValue([]),
   setWeights: jest.fn(),
 };
@@ -64,9 +64,17 @@ const tf = {
     conv2d: jest.fn(() => mockLayer),
     maxPooling2d: jest.fn(() => mockLayer),
     batchNormalization: jest.fn(() => mockLayer),
+    layerNormalization: jest.fn(() => mockLayer),
     lstm: jest.fn(() => mockLayer),
     gru: jest.fn(() => mockLayer),
+    reshape: jest.fn(() => mockLayer),
+    add: jest.fn(() => mockLayer),
+    attention: jest.fn(() => mockLayer),
+    globalAveragePooling1d: jest.fn(() => mockLayer),
   },
+
+  // Symbolic input + functional API
+  input: jest.fn(() => mockLayer),
 
   // Regularizers
   regularizers: {

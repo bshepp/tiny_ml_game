@@ -17,11 +17,22 @@ Single-page React app. No routing, no backend. UI, ML wiring, and game state liv
 
 ### Key Files
 
-- **App.js** — Main component: model lifecycle, game state, AI strategies, theme, UI rendering
+- **App.js** — Main component: tabs (Game/Stats/About), model lifecycle (per arch), game state, AI strategies, theme, telemetry wiring, UI rendering
+- **models.js** — Model factory: `MODEL_ARCHITECTURES`, `ARCH_LABELS`, `ARCH_DESCRIPTIONS`, `createModel(arch)`. Three architectures share the same 15-feature input and 3-class softmax output:
+  - `dense` — original 128→64→32→3 MLP with L2+dropout
+  - `gru` — reshape to (5,3) → GRU(32) → dense(16) → dense(3)
+  - `transformer` — functional-API self-attention (single head, d_model=8): Q/K/V dense → scaled dot-product (`tf.layers.dot` + softmax) → residual+layerNorm → feed-forward → residual+layerNorm → globalAveragePooling1d → dense(3)
+- **api.js** — Telemetry HTTP client. `sendRound(payload)`, `fetchStats()`, `telemetryEnabled()`. All no-op when `REACT_APP_TELEMETRY_URL` is unset.
+- **components/Tabs.js** — Accessible tablist with roving tabindex + arrow-key navigation
+- **components/StatsTab.js** — Global stats dashboard, fetches from telemetry API; degrades gracefully when no API is configured
+- **components/AboutTab.js** — Project info, runtime info (TF.js backend), privacy notes, consent reset button
+- **components/ConsentBanner.js** — Fixed bottom-right opt-in prompt for anonymous telemetry
 - **gameLogic.js** — Pure helpers: `MOVE_NAMES`, `MOVE_EMOJI`, `getCounterMove`, `getResult`, `encodeGameSequence`, `playerMoveEntropy`, sequence constants
 - **hooks/useGameStorage.js** — localStorage persistence for game history (with feature detection)
 - **hooks/useModelStorage.js** — IndexedDB persistence for trained TF.js model
-- **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Jest/JSDOM tests
+- **hooks/useTelemetry.js** — Consent state (`tiny-ml-game-consent`), stable session id (`tiny-ml-game-session-id`), `recordRound(payload)` fire-and-forget
+- **infra/** — Terraform for AWS Lambda Function URL + DynamoDB. See `infra/README.md`.
+- **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Jest/JSDOM tests (extended with `tf.input`, `layerNormalization`, `reshape`, `add`, `softmax`, `dot`, `globalAveragePooling1d`, chainable `apply` for the functional API)
 
 ### Neural Network
 
@@ -95,7 +106,46 @@ const MOVE_EMOJI = { Rock: '🗿', Paper: '📄', Scissors: '✂️' };
 
 Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings (see `STAT_CARD_STYLES` / `STAT_VALUE_STYLES` in App.js) where each map value is a complete literal class string. Tailwind's JIT scans those literals directly, so no `safelist` is needed.
 
-## Theme System
+## Tabs
+
+The main UI is split into three tabs (`activeTab` state in `App.js`, rendered by `components/Tabs.js`):
+
+- **🎮 Game** — the playable interface (existing UI)
+- **🌍 Global Stats** — `StatsTab` fetches `${REACT_APP_TELEMETRY_URL}/stats` and renders aggregate counts, outcomes, move distribution, win rate by strategy, and win rate by model architecture. Shows a friendly "telemetry not configured" message when `REACT_APP_TELEMETRY_URL` is empty.
+- **ℹ️ About** — `AboutTab` shows project info, the active TF.js backend, telemetry status, and a "Reset consent" button.
+
+Each tab panel is a `role="tabpanel"` with `id="tabpanel-{id}"` matching the `aria-controls` on the tab.
+
+## Model Architecture Selector
+
+A `<select id="model-arch-select">` directly above the strategy radiogroup lets the player switch between `dense`, `gru`, and `transformer`. Switching:
+
+1. Persists the choice to `tiny-ml-game-model-arch` in localStorage
+2. Triggers `initializeModel(true)` to rebuild the network with the new factory
+3. Disables itself while loading or training to prevent mid-training swaps
+
+`createAdvancedModel` is now a one-line wrapper around `createModel(modelArch)` from `models.js`.
+
+## Telemetry (opt-in)
+
+Disabled by default. Activates only when `REACT_APP_TELEMETRY_URL` is set at build time **and** the user clicks "Accept" on the consent banner.
+
+- `useTelemetry()` exposes `{consent, grant, deny, reset, recordRound, enabled, sessionId}`
+- After every round in `handlePlayerMove`, the app calls `telemetry.recordRound({sequence, strategy, modelArch})` — the hook adds `sessionId`, `schemaVersion`, and `timestamp` and fires-and-forgets via `fetch(..., {keepalive: true})`
+- `ConsentBanner` is mounted only when `telemetry.enabled && telemetry.consent === null`
+- No IP, no fingerprint, no cookies. Backend stores rounds with a 90-day TTL (DynamoDB auto-deletes)
+
+See `infra/README.md` for the AWS deployment.
+
+## Hosting
+
+Deployed via `npm run deploy` (gh-pages) to `roshambot.briansheppard.com`. The custom domain is set up via:
+
+- `public/CNAME` containing `roshambot.briansheppard.com`
+- `package.json` `homepage` field pointing at the same URL
+- A DNS CNAME record at `briansheppard.com` zone pointing `roshambot` → `bshepp.github.io`
+
+
 
 Class-based dark mode (`darkMode: 'class'` in `tailwind.config.js`). Theme is stored in `tiny-ml-game-theme` (`'light'` | `'dark'`).
 

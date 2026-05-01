@@ -1,0 +1,6 @@
+build/
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+node_modules/

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import * as tf from '@tensorflow/tfjs';
 import { useGameStorage } from './hooks/useGameStorage';
 import { useModelStorage } from './hooks/useModelStorage';
+import { useTelemetry } from './hooks/useTelemetry';
 import {
   MOVE_NAMES,
   MOVE_EMOJI,
@@ -11,7 +12,14 @@ import {
   playerMoveEntropy,
   SEQUENCE_FEATURES,
 } from './gameLogic';
+import { createModel, MODEL_ARCHITECTURES, ARCH_LABELS, ARCH_DESCRIPTIONS } from './models';
+import Tabs from './components/Tabs';
+import StatsTab from './components/StatsTab';
+import AboutTab from './components/AboutTab';
+import ConsentBanner from './components/ConsentBanner';
 import './App.css';
+
+const MODEL_ARCH_STORAGE_KEY = 'tiny-ml-game-model-arch';
 
 const MAX_HISTORY = 50;
 const TRAINING_BATCH_SIZE = 25;
@@ -107,6 +115,17 @@ const App = () => {
   const [modelStatus, setModelStatus] = useState('new'); // 'new', 'loaded', 'trained'
   const [lastProbabilities, setLastProbabilities] = useState(null); // [pRock, pPaper, pScissors] of player's NEXT predicted move
   const [theme, setTheme] = useState(getInitialTheme);
+  const [modelArch, setModelArchState] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(MODEL_ARCH_STORAGE_KEY);
+      if (MODEL_ARCHITECTURES.includes(saved)) return saved;
+    } catch { /* ignore */ }
+    return 'dense';
+  });
+  const [activeTab, setActiveTab] = useState('game');
+  const [tfBackend, setTfBackend] = useState('initializing');
+
+  const telemetry = useTelemetry();
 
   // Refs
   const autoSaveTimerRef = useRef(null);
@@ -167,33 +186,7 @@ const App = () => {
     checkModelExists();
   }, [checkModelExists]);
 
-  const createAdvancedModel = useCallback(() => {
-    const sequenceModel = tf.sequential();
-
-    sequenceModel.add(tf.layers.dense({
-      inputShape: [SEQUENCE_FEATURES],
-      units: 128,
-      activation: 'relu',
-      kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
-    }));
-    sequenceModel.add(tf.layers.dropout({ rate: 0.3 }));
-    sequenceModel.add(tf.layers.dense({
-      units: 64,
-      activation: 'relu',
-      kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
-    }));
-    sequenceModel.add(tf.layers.dropout({ rate: 0.2 }));
-    sequenceModel.add(tf.layers.dense({ units: 32, activation: 'relu' }));
-    sequenceModel.add(tf.layers.dense({ units: 3, activation: 'softmax' }));
-
-    sequenceModel.compile({
-      optimizer: tf.train.adam(0.001),
-      loss: 'categoricalCrossentropy',
-      metrics: ['accuracy'],
-    });
-
-    return sequenceModel;
-  }, []);
+  const createAdvancedModel = useCallback(() => createModel(modelArch), [modelArch]);
 
   const initializeModel = useCallback(async (forceNew = false) => {
     setIsLoading(true);
@@ -201,6 +194,7 @@ const App = () => {
 
     try {
       await tf.ready();
+      try { setTfBackend(tf.getBackend && tf.getBackend()); } catch { /* ignore */ }
 
       let loadedModel = null;
       if (!forceNew) {
@@ -243,6 +237,24 @@ const App = () => {
   useEffect(() => {
     initializeModel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist model arch + reinit when the user picks a different architecture.
+  // Skips the first run so we don't double-initialize on mount.
+  const archHasMountedRef = useRef(false);
+  useEffect(() => {
+    try { window.localStorage.setItem(MODEL_ARCH_STORAGE_KEY, modelArch); } catch { /* ignore */ }
+    if (!archHasMountedRef.current) {
+      archHasMountedRef.current = true;
+      return;
+    }
+    initializeModel(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelArch]);
+
+  const setModelArch = useCallback((arch) => {
+    if (!MODEL_ARCHITECTURES.includes(arch)) return;
+    setModelArchState(arch);
   }, []);
 
   // Cleanup model and pending timers on unmount
@@ -431,10 +443,21 @@ const App = () => {
 
     setGameHistory(trimmedHistory);
 
+    // Anonymous telemetry (only if user opted in via consent banner).
+    telemetry.recordRound({
+      sequence: trimmedHistory.slice(-6).map((g) => ({
+        playerMove: g.playerMove,
+        aiMove: g.aiMove,
+        result: g.result,
+      })),
+      strategy: aiStrategy,
+      modelArch,
+    });
+
     if (aiStrategy === 'learning' && trimmedHistory.length >= 5) {
       setTimeout(() => trainModel(trimmedHistory), 100);
     }
-  }, [aiStrategy, gameHistory, predictNextMove, trainModel]);
+  }, [aiStrategy, gameHistory, predictNextMove, trainModel, telemetry, modelArch]);
 
   // Keyboard shortcuts: R / P / S to play. Ignore when typing in inputs or when busy.
   useEffect(() => {
@@ -535,6 +558,42 @@ const App = () => {
         {error && <GameError message={error} onRetry={() => initializeModel()} />}
 
         <main id="main-content" tabIndex={-1}>
+        <Tabs
+          tabs={[
+            { id: 'game', label: '🎮 Game' },
+            { id: 'stats', label: '🌍 Global Stats' },
+            { id: 'about', label: 'ℹ️ About' },
+          ]}
+          activeId={activeTab}
+          onChange={setActiveTab}
+        />
+
+        {activeTab === 'stats' && (
+          <div role="tabpanel" id="tabpanel-stats" aria-labelledby="tab-stats">
+            <StatsTab />
+          </div>
+        )}
+
+        {activeTab === 'about' && (
+          <div role="tabpanel" id="tabpanel-about" aria-labelledby="tab-about">
+            <AboutTab
+              backend={tfBackend}
+              telemetryStatus={
+                !telemetry.enabled
+                  ? 'not configured for this build'
+                  : telemetry.consent === 'granted'
+                    ? 'enabled (you accepted)'
+                    : telemetry.consent === 'denied'
+                      ? 'disabled (you declined)'
+                      : 'awaiting your choice'
+              }
+              onResetConsent={telemetry.reset}
+            />
+          </div>
+        )}
+
+        {activeTab === 'game' && (
+        <div role="tabpanel" id="tabpanel-game" aria-labelledby="tab-game">
         <section
           aria-labelledby="game-heading"
           className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 motion-safe:transition-colors"
@@ -693,6 +752,27 @@ const App = () => {
             <h2 id="strategy-heading" className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">
               <span aria-hidden="true">🤖 </span>AI Strategy
             </h2>
+
+            <div className="mb-4">
+              <label htmlFor="model-arch-select" className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1">
+                Neural model architecture
+              </label>
+              <select
+                id="model-arch-select"
+                value={modelArch}
+                onChange={(e) => setModelArch(e.target.value)}
+                disabled={isLoading || isTraining}
+                className="w-full p-2 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300"
+              >
+                {MODEL_ARCHITECTURES.map((arch) => (
+                  <option key={arch} value={arch}>{ARCH_LABELS[arch]}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                {ARCH_DESCRIPTIONS[modelArch]}
+              </p>
+            </div>
+
             <div
               role="radiogroup"
               aria-labelledby="strategy-heading"
@@ -803,8 +883,13 @@ const App = () => {
             </ul>
           </section>
         )}
+        </div>
+        )}
         </main>
       </div>
+      {telemetry.enabled && telemetry.consent === null && (
+        <ConsentBanner onAccept={telemetry.grant} onDecline={telemetry.deny} />
+      )}
     </div>
   );
 };
