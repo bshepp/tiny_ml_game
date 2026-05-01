@@ -52,7 +52,7 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// Static class maps. Tailwind safelist also covers these — kept here for IDE clarity.
+// Static class maps. Full literal strings so Tailwind's JIT picks them up via content scan.
 const STAT_CARD_STYLES = {
   blue: 'bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-700 text-blue-700 dark:text-blue-200',
   green: 'bg-green-50 dark:bg-green-900/30 border-green-100 dark:border-green-700 text-green-700 dark:text-green-200',

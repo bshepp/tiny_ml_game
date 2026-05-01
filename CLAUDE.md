@@ -93,7 +93,7 @@ const MOVE_EMOJI = { Rock: '🗿', Paper: '📄', Scissors: '✂️' };
 
 ### Tailwind Note
 
-Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings (see `STAT_CARD_STYLES` / `STAT_VALUE_STYLES` in App.js). A regex `safelist` in `tailwind.config.js` covers color/shade combinations that are still composed dynamically, including `dark:`, `hover:`, `focus:`, `focus-visible:`, `motion-safe:`, and `group-hover:` variants.
+Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings (see `STAT_CARD_STYLES` / `STAT_VALUE_STYLES` in App.js) where each map value is a complete literal class string. Tailwind's JIT scans those literals directly, so no `safelist` is needed.
 
 ## Theme System
 
