@@ -209,11 +209,11 @@ const App = () => {
       if (loadedModel) {
         activeModel = loadedModel;
         setModelStatus('loaded');
-        setMessage('🧠 Loaded trained AI model! Choose Rock, Paper, or Scissors!');
+        setMessage('🧠 Loaded trained AI model — an AI-powered game with machine learning. Choose Rock, Paper, or Scissors!');
       } else {
         activeModel = createAdvancedModel();
         setModelStatus('new');
-        setMessage('🤖 AI ready! Choose Rock, Paper, or Scissors!');
+        setMessage('🤖 AI ready — an AI-powered game with machine learning. Choose Rock, Paper, or Scissors!');
         setModelAccuracy(0);
       }
 
@@ -542,31 +542,30 @@ const App = () => {
         Skip to main content
       </a>
       <div className="max-w-4xl mx-auto">
-        <div className="flex justify-end mb-2">
+        {error && <GameError message={error} onRetry={() => initializeModel()} />}
+
+        <main id="main-content" tabIndex={-1}>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <Tabs
+            tabs={[
+              { id: 'game', label: '🎮 Game' },
+              { id: 'stats', label: '🌍 Global Stats' },
+              { id: 'about', label: 'ℹ️ About' },
+            ]}
+            activeId={activeTab}
+            onChange={setActiveTab}
+          />
           <button
             type="button"
             onClick={toggleTheme}
             aria-pressed={theme === 'dark'}
             aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            className="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 motion-safe:transition-colors"
+            className="shrink-0 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 motion-safe:transition-colors"
           >
             <span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span>
             <span className="ml-2 text-sm font-medium">{theme === 'dark' ? 'Light' : 'Dark'}</span>
           </button>
         </div>
-
-        {error && <GameError message={error} onRetry={() => initializeModel()} />}
-
-        <main id="main-content" tabIndex={-1}>
-        <Tabs
-          tabs={[
-            { id: 'game', label: '🎮 Game' },
-            { id: 'stats', label: '🌍 Global Stats' },
-            { id: 'about', label: 'ℹ️ About' },
-          ]}
-          activeId={activeTab}
-          onChange={setActiveTab}
-        />
 
         {activeTab === 'stats' && (
           <div role="tabpanel" id="tabpanel-stats" aria-labelledby="tab-stats">
@@ -599,10 +598,9 @@ const App = () => {
           className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 motion-safe:transition-colors"
         >
           <div className="text-center mb-6">
-            <h1 id="game-heading" className="text-4xl font-bold text-gray-900 dark:text-gray-50 mb-2">
-              <span aria-hidden="true">🗿📄✂️ </span>Rock Paper Scissors
+            <h1 id="game-heading" className="text-4xl font-bold text-gray-900 dark:text-gray-50">
+              Rock Paper Scissors
             </h1>
-            <p className="text-lg text-gray-700 dark:text-gray-300">AI-Powered Game with Machine Learning</p>
           </div>
 
           {isLoading && (

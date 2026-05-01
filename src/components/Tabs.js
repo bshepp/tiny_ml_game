@@ -27,7 +27,7 @@ const Tabs = ({ tabs, activeId, onChange }) => {
       role="tablist"
       aria-label="Sections"
       onKeyDown={handleKeyDown}
-      className="flex flex-wrap gap-1 mb-4 bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-xl p-1 shadow"
+      className="flex flex-wrap gap-1 bg-white/70 dark:bg-gray-800/70 backdrop-blur rounded-xl p-1 shadow"
     >
       {tabs.map((t) => {
         const selected = t.id === activeId;
