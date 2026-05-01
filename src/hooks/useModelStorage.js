@@ -4,6 +4,28 @@ import * as tf from '@tensorflow/tfjs';
 const MODEL_STORAGE_KEY = 'indexeddb://tiny-ml-game-model';
 const MODEL_META_KEY = 'tiny-ml-game-model-meta';
 
+const safeGetItem = (key) => {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+const safeSetItem = (key, value) => {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* QuotaExceededError or SecurityError (Safari private mode) */
+  }
+};
+const safeRemoveItem = (key) => {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+};
+
 /**
  * Hook for persisting and loading TensorFlow.js models using IndexedDB
  */
@@ -12,7 +34,7 @@ export const useModelStorage = () => {
   const [isLoadingModel, setIsLoadingModel] = useState(false);
   const [lastSaved, setLastSaved] = useState(() => {
     try {
-      const meta = localStorage.getItem(MODEL_META_KEY);
+      const meta = safeGetItem(MODEL_META_KEY);
       return meta ? JSON.parse(meta).lastSaved : null;
     } catch {
       return null;
@@ -20,7 +42,7 @@ export const useModelStorage = () => {
   });
   const [hasSavedModel, setHasSavedModel] = useState(() => {
     try {
-      const meta = localStorage.getItem(MODEL_META_KEY);
+      const meta = safeGetItem(MODEL_META_KEY);
       return meta ? JSON.parse(meta).exists : false;
     } catch {
       return false;
@@ -39,7 +61,7 @@ export const useModelStorage = () => {
       
       const now = new Date().toISOString();
       const meta = { exists: true, lastSaved: now };
-      localStorage.setItem(MODEL_META_KEY, JSON.stringify(meta));
+      safeSetItem(MODEL_META_KEY, JSON.stringify(meta));
       
       setLastSaved(now);
       setHasSavedModel(true);
@@ -73,7 +95,7 @@ export const useModelStorage = () => {
       }
       
       // Clear stale metadata
-      localStorage.removeItem(MODEL_META_KEY);
+      safeRemoveItem(MODEL_META_KEY);
       setHasSavedModel(false);
       setLastSaved(null);
       
@@ -96,7 +118,7 @@ export const useModelStorage = () => {
         await tf.io.removeModel(modelKey);
       }
       
-      localStorage.removeItem(MODEL_META_KEY);
+      safeRemoveItem(MODEL_META_KEY);
       setHasSavedModel(false);
       setLastSaved(null);
       
@@ -119,7 +141,7 @@ export const useModelStorage = () => {
       setHasSavedModel(exists);
 
       if (!exists) {
-        localStorage.removeItem(MODEL_META_KEY);
+        safeRemoveItem(MODEL_META_KEY);
         setLastSaved(null);
       }
 

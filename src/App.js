@@ -1,25 +1,38 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { useGameStorage } from './hooks/useGameStorage';
 import { useModelStorage } from './hooks/useModelStorage';
+import {
+  MOVE_NAMES,
+  MOVE_EMOJI,
+  getCounterMove,
+  getResult,
+  encodeGameSequence,
+  playerMoveEntropy,
+  SEQUENCE_FEATURES,
+} from './gameLogic';
 import './App.css';
 
-const MOVE_NAMES = ['Rock', 'Paper', 'Scissors'];
-const MOVE_EMOJI = { Rock: '🗿', Paper: '📄', Scissors: '✂️' };
 const MAX_HISTORY = 50;
-const TRAINING_BATCH_SIZE = 10;
+const TRAINING_BATCH_SIZE = 25;
+const AUTO_SAVE_DEBOUNCE_MS = 1500;
+const THEME_STORAGE_KEY = 'tiny-ml-game-theme';
 
 const GameError = ({ message, onRetry }) => (
-  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+  <div
+    role="alert"
+    className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-4 mb-4 motion-safe:transition-colors"
+  >
     <div className="flex items-center">
-      <div className="text-red-400 mr-3">⚠️</div>
+      <div className="text-red-500 dark:text-red-300 mr-3" aria-hidden="true">⚠️</div>
       <div>
-        <h3 className="text-red-800 font-medium">Error</h3>
-        <p className="text-red-600 text-sm mt-1">{message}</p>
+        <h3 className="text-red-800 dark:text-red-100 font-medium">Error</h3>
+        <p className="text-red-700 dark:text-red-200 text-sm mt-1">{message}</p>
         {onRetry && (
           <button
+            type="button"
             onClick={onRetry}
-            className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-colors"
+            className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-300 motion-safe:transition-colors"
           >
             Retry
           </button>
@@ -30,28 +43,54 @@ const GameError = ({ message, onRetry }) => (
 );
 
 const LoadingSpinner = () => (
-  <div className="flex items-center space-x-2">
-    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-    <span className="text-sm text-gray-600">Initializing AI...</span>
+  <div role="status" className="flex items-center space-x-2">
+    <div
+      aria-hidden="true"
+      className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 dark:border-blue-300"
+    ></div>
+    <span className="text-sm text-gray-700 dark:text-gray-200">Initializing AI...</span>
   </div>
 );
 
-// Color variants must be statically defined for Tailwind JIT
-const colorStyles = {
-  blue: { bg: 'bg-blue-50', border: 'border-blue-100', value: 'text-blue-600', label: 'text-blue-700' },
-  green: { bg: 'bg-green-50', border: 'border-green-100', value: 'text-green-600', label: 'text-green-700' },
-  red: { bg: 'bg-red-50', border: 'border-red-100', value: 'text-red-600', label: 'text-red-700' },
-  gray: { bg: 'bg-gray-50', border: 'border-gray-100', value: 'text-gray-600', label: 'text-gray-700' },
+// Static class maps. Tailwind safelist also covers these — kept here for IDE clarity.
+const STAT_CARD_STYLES = {
+  blue: 'bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-700 text-blue-700 dark:text-blue-200',
+  green: 'bg-green-50 dark:bg-green-900/30 border-green-100 dark:border-green-700 text-green-700 dark:text-green-200',
+  red: 'bg-red-50 dark:bg-red-900/30 border-red-100 dark:border-red-700 text-red-700 dark:text-red-200',
+  gray: 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200',
+  purple: 'bg-purple-50 dark:bg-purple-900/30 border-purple-100 dark:border-purple-700 text-purple-700 dark:text-purple-200',
+};
+const STAT_VALUE_STYLES = {
+  blue: 'text-blue-700 dark:text-blue-200',
+  green: 'text-green-700 dark:text-green-200',
+  red: 'text-red-700 dark:text-red-200',
+  gray: 'text-gray-800 dark:text-gray-100',
+  purple: 'text-purple-700 dark:text-purple-200',
 };
 
-const StatCard = ({ label, value, color = "blue" }) => {
-  const styles = colorStyles[color] || colorStyles.blue;
-  return (
-    <div className={`${styles.bg} border ${styles.border} rounded-lg p-4 text-center`}>
-      <div className={`text-2xl font-bold ${styles.value}`}>{value}</div>
-      <div className={`text-sm ${styles.label}`}>{label}</div>
+const StatCard = ({ label, value, color = 'blue', srLabel }) => (
+  <div
+    className={`${STAT_CARD_STYLES[color] || STAT_CARD_STYLES.blue} border rounded-lg p-4 text-center motion-safe:transition-colors`}
+  >
+    <div className={`text-2xl font-bold ${STAT_VALUE_STYLES[color] || STAT_VALUE_STYLES.blue}`}>
+      {value}
     </div>
-  );
+    <div className="text-sm">{srLabel ? <span className="sr-only">{srLabel}: </span> : null}{label}</div>
+  </div>
+);
+
+// Theme management — class-based dark mode on <html>.
+const getInitialTheme = () => {
+  try {
+    const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch {
+    /* ignore */
+  }
+  if (typeof window !== 'undefined' && window.matchMedia) {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return 'light';
 };
 
 const App = () => {
@@ -66,10 +105,17 @@ const App = () => {
   const [isTraining, setIsTraining] = useState(false);
   const [modelAccuracy, setModelAccuracy] = useState(0);
   const [modelStatus, setModelStatus] = useState('new'); // 'new', 'loaded', 'trained'
-  
+  const [lastProbabilities, setLastProbabilities] = useState(null); // [pRock, pPaper, pScissors] of player's NEXT predicted move
+  const [theme, setTheme] = useState(getInitialTheme);
+
+  // Refs
+  const autoSaveTimerRef = useRef(null);
+  const userSetThemeRef = useRef(false);
+  const resultRegionRef = useRef(null);
+
   // Add data persistence
   const { clearStorage } = useGameStorage(gameHistory, setGameHistory);
-  
+
   // Add model persistence
   const {
     saveModel,
@@ -79,8 +125,41 @@ const App = () => {
     isSaving,
     isLoadingModel,
     hasSavedModel,
-    lastSaved
+    lastSaved,
   } = useModelStorage();
+
+  // Apply theme class to <html> and persist user choice.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') root.classList.add('dark');
+    else root.classList.remove('dark');
+    if (userSetThemeRef.current) {
+      try { window.localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* ignore */ }
+    }
+  }, [theme]);
+
+  // React to OS theme changes only when user has not explicitly chosen.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => {
+      let saved = null;
+      try { saved = window.localStorage.getItem(THEME_STORAGE_KEY); } catch { /* ignore */ }
+      if (saved === 'light' || saved === 'dark') return;
+      setTheme(e.matches ? 'dark' : 'light');
+    };
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else if (mq.addListener) mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', handler);
+      else if (mq.removeListener) mq.removeListener(handler);
+    };
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    userSetThemeRef.current = true;
+    setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   // Sync hasSavedModel with the actual IndexedDB contents on mount,
   // so stale localStorage metadata can't claim a model that no longer exists.
@@ -90,40 +169,27 @@ const App = () => {
 
   const createAdvancedModel = useCallback(() => {
     const sequenceModel = tf.sequential();
-    
-    // Input layer: sequence of last 5 moves + current game state
-    sequenceModel.add(tf.layers.dense({ 
-      inputShape: [15], // 5 moves × 3 dimensions each
-      units: 128, 
+
+    sequenceModel.add(tf.layers.dense({
+      inputShape: [SEQUENCE_FEATURES],
+      units: 128,
       activation: 'relu',
-      kernelRegularizer: tf.regularizers.l2({ l2: 0.01 })
+      kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
     }));
-    
     sequenceModel.add(tf.layers.dropout({ rate: 0.3 }));
-    
-    sequenceModel.add(tf.layers.dense({ 
-      units: 64, 
+    sequenceModel.add(tf.layers.dense({
+      units: 64,
       activation: 'relu',
-      kernelRegularizer: tf.regularizers.l2({ l2: 0.01 })
+      kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
     }));
-    
     sequenceModel.add(tf.layers.dropout({ rate: 0.2 }));
-    
-    sequenceModel.add(tf.layers.dense({ 
-      units: 32, 
-      activation: 'relu' 
-    }));
-    
-    // Output layer: probability distribution over 3 moves
-    sequenceModel.add(tf.layers.dense({ 
-      units: 3, 
-      activation: 'softmax' 
-    }));
+    sequenceModel.add(tf.layers.dense({ units: 32, activation: 'relu' }));
+    sequenceModel.add(tf.layers.dense({ units: 3, activation: 'softmax' }));
 
     sequenceModel.compile({
       optimizer: tf.train.adam(0.001),
       loss: 'categoricalCrossentropy',
-      metrics: ['accuracy']
+      metrics: ['accuracy'],
     });
 
     return sequenceModel;
@@ -132,21 +198,19 @@ const App = () => {
   const initializeModel = useCallback(async (forceNew = false) => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
       await tf.ready();
-      
+
       let loadedModel = null;
-      
-      // Try to load a saved model first (unless forceNew is true)
       if (!forceNew) {
         try {
           loadedModel = await loadModel();
         } catch (err) {
-          console.log('No saved model to load, creating new one');
+          // No saved model — fall through to creating a new one.
         }
       }
-      
+
       let activeModel;
       if (loadedModel) {
         activeModel = loadedModel;
@@ -158,17 +222,17 @@ const App = () => {
         setMessage('🤖 AI ready! Choose Rock, Paper, or Scissors!');
         setModelAccuracy(0);
       }
-      
+
       // Warm up the model with dummy data
-      const dummyInput = tf.zeros([1, 15]);
-      const warmup = activeModel.predict(dummyInput);
-      warmup.dispose();
-      dummyInput.dispose();
-      
+      tf.tidy(() => {
+        const dummyInput = tf.zeros([1, SEQUENCE_FEATURES]);
+        activeModel.predict(dummyInput);
+      });
+
       setModel(activeModel);
     } catch (err) {
-      console.error("Error initializing model:", err);
-      setError("Failed to initialize AI model. Falling back to basic strategies.");
+      console.error('Error initializing model:', err);
+      setError('Failed to initialize AI model. Falling back to basic strategies.');
       setAiStrategy('random');
     } finally {
       setIsLoading(false);
@@ -179,85 +243,62 @@ const App = () => {
   useEffect(() => {
     initializeModel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Intentionally empty - only run on mount
+  }, []);
 
-  // Cleanup model on unmount
+  // Cleanup model and pending timers on unmount
   useEffect(() => {
     return () => {
-      if (model) {
-        model.dispose();
-      }
+      if (model) model.dispose();
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, [model]);
 
-  const getCounterMove = useCallback((move) => {
-    const moveIndex = MOVE_NAMES.indexOf(move);
-    return MOVE_NAMES[(moveIndex + 1) % 3]; // Rock -> Paper, Paper -> Scissors, Scissors -> Rock
-  }, []);
-
-  const encodeGameSequence = useCallback((history) => {
-    const sequence = new Array(15).fill(0); // 5 moves × 3 dimensions
-    const recentMoves = history.slice(-5);
-    
-    recentMoves.forEach((game, idx) => {
-      const playerIdx = MOVE_NAMES.indexOf(game.playerMove);
-      const aiIdx = MOVE_NAMES.indexOf(game.aiMove);
-      const resultIdx = game.result === 'win' ? 0 : game.result === 'loss' ? 1 : 2;
-      
-      if (playerIdx !== -1 && aiIdx !== -1) {
-        sequence[idx * 3] = playerIdx / 2; // Normalize to 0-1
-        sequence[idx * 3 + 1] = aiIdx / 2;
-        sequence[idx * 3 + 2] = resultIdx / 2;
-      }
-    });
-    
-    return sequence;
-  }, []);
-
   const predictNextMove = useCallback(async (history) => {
     if (!model || history.length < 3) {
+      setLastProbabilities(null);
       return MOVE_NAMES[Math.floor(Math.random() * 3)];
     }
 
     let input = null;
     let prediction = null;
-    
+
     try {
       const sequence = encodeGameSequence(history);
       input = tf.tensor2d([sequence]);
       prediction = model.predict(input);
       const probabilities = await prediction.data();
-      
-      // Mix model probabilities with a uniform distribution, then sample.
-      // Sampling (rather than argmax) is what actually injects randomness so
-      // the AI isn't perfectly deterministic for a given history.
-      const randomFactor = 0.2;
+
+      // Anneal exploration: start ~30% random, settle near 5% as the model
+      // sees more games. Without sampling at all the AI would be deterministic.
+      const randomFactor = Math.max(0.05, 0.3 - 0.01 * history.length);
       const adjustedProbs = Array.from(probabilities, (p) =>
-        p * (1 - randomFactor) + (randomFactor / 3)
+        p * (1 - randomFactor) + randomFactor / 3
       );
       const total = adjustedProbs.reduce((s, p) => s + p, 0) || 1;
-      let r = Math.random() * total;
-      let predictedMoveIndex = adjustedProbs.length - 1;
-      for (let i = 0; i < adjustedProbs.length; i++) {
-        r -= adjustedProbs[i];
+      const normalized = adjustedProbs.map((p) => p / total);
+      setLastProbabilities(normalized);
+
+      let r = Math.random();
+      let predictedMoveIndex = normalized.length - 1;
+      for (let i = 0; i < normalized.length; i++) {
+        r -= normalized[i];
         if (r <= 0) {
           predictedMoveIndex = i;
           break;
         }
       }
       const predictedMove = MOVE_NAMES[predictedMoveIndex];
-      
-      // Return counter move to beat predicted player move
+
       return getCounterMove(predictedMove);
     } catch (err) {
-      console.error("Prediction error:", err);
+      console.error('Prediction error:', err);
+      setLastProbabilities(null);
       return MOVE_NAMES[Math.floor(Math.random() * 3)];
     } finally {
-      // Always dispose tensors to prevent memory leaks
       if (input) input.dispose();
       if (prediction) prediction.dispose();
     }
-  }, [model, encodeGameSequence, getCounterMove]);
+  }, [model]);
 
   const trainModel = useCallback(async (history) => {
     if (!model || history.length < TRAINING_BATCH_SIZE || isTraining) {
@@ -265,7 +306,7 @@ const App = () => {
     }
 
     setIsTraining(true);
-    
+
     try {
       const trainingData = history.slice(-TRAINING_BATCH_SIZE);
       const startIdx = history.length - trainingData.length;
@@ -288,15 +329,17 @@ const App = () => {
       });
 
       if (inputs.length > 0) {
-        const xs = tf.tensor2d(inputs);
-        const ys = tf.tensor2d(labels);
+        const tensors = tf.tidy(() => ({
+          xs: tf.tensor2d(inputs),
+          ys: tf.tensor2d(labels),
+        }));
 
         try {
-          const trainResult = await model.fit(xs, ys, {
+          const trainResult = await model.fit(tensors.xs, tensors.ys, {
             epochs: 3,
             batchSize: Math.min(inputs.length, 8),
             verbose: 0,
-            validationSplit: 0.2
+            validationSplit: 0.2,
           });
 
           const accuracy = trainResult.history.acc || trainResult.history.accuracy;
@@ -306,327 +349,461 @@ const App = () => {
             setModelStatus('trained');
           }
         } finally {
-          xs.dispose();
-          ys.dispose();
+          tensors.xs.dispose();
+          tensors.ys.dispose();
         }
 
-        // Auto-save every 10 games when using learning mode, regardless of
-        // whether this round produced an accuracy value.
-        if (history.length >= 10 && history.length % 10 === 0) {
+        // Debounced auto-save: collapse rapid bursts into one write.
+        if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = setTimeout(() => {
           saveModel(model);
-        }
+          autoSaveTimerRef.current = null;
+        }, AUTO_SAVE_DEBOUNCE_MS);
       }
     } catch (err) {
-      console.error("Training error:", err);
+      console.error('Training error:', err);
     } finally {
       setIsTraining(false);
     }
-  }, [model, encodeGameSequence, isTraining, saveModel]);
+  }, [model, isTraining, saveModel]);
 
   const handlePlayerMove = useCallback(async (move) => {
     setPlayerMove(move);
     setMessage('🤔 AI is thinking...');
-    
+
     let aiChoice;
-    
+
     try {
       switch (aiStrategy) {
         case 'random':
           aiChoice = MOVE_NAMES[Math.floor(Math.random() * 3)];
           break;
-          
-        case 'counter':
-          const lastPlayerMove = gameHistory.length > 0 
-            ? gameHistory[gameHistory.length - 1].playerMove 
+        case 'counter': {
+          const lastPlayerMove = gameHistory.length > 0
+            ? gameHistory[gameHistory.length - 1].playerMove
             : null;
           aiChoice = lastPlayerMove ? getCounterMove(lastPlayerMove) : MOVE_NAMES[Math.floor(Math.random() * 3)];
           break;
-          
+        }
         case 'learning':
           aiChoice = await predictNextMove(gameHistory);
           break;
-          
         case 'pattern':
-          // Analyze last 3 moves for patterns
           if (gameHistory.length >= 3) {
-            const lastThree = gameHistory.slice(-3).map(g => g.playerMove);
+            const lastThree = gameHistory.slice(-3).map((g) => g.playerMove);
             const mostCommon = lastThree.reduce((a, b, _, arr) =>
-              arr.filter(v => v === a).length >= arr.filter(v => v === b).length ? a : b
+              arr.filter((v) => v === a).length >= arr.filter((v) => v === b).length ? a : b
             );
             aiChoice = getCounterMove(mostCommon);
           } else {
             aiChoice = MOVE_NAMES[Math.floor(Math.random() * 3)];
           }
           break;
-          
         default:
           aiChoice = MOVE_NAMES[Math.floor(Math.random() * 3)];
       }
     } catch (err) {
-      console.error("Error in AI decision:", err);
+      console.error('Error in AI decision:', err);
       aiChoice = MOVE_NAMES[Math.floor(Math.random() * 3)];
     }
-    
+
     setAiMove(aiChoice);
-    
-    // Determine winner
-    let result, resultMessage;
-    if (move === aiChoice) {
-      result = "tie";
-      resultMessage = "It's a tie! 🤝";
-    } else if (
-      (move === 'Rock' && aiChoice === 'Scissors') ||
-      (move === 'Scissors' && aiChoice === 'Paper') ||
-      (move === 'Paper' && aiChoice === 'Rock')
-    ) {
-      result = "win";
-      resultMessage = 'You win! 🎉';
-    } else {
-      result = "loss";
-      resultMessage = 'AI wins! 🤖';
-    }
-    
+
+    const result = getResult(move, aiChoice);
+    const resultMessage = result === 'win'
+      ? 'You win! 🎉'
+      : result === 'loss'
+        ? 'AI wins! 🤖'
+        : "It's a tie! 🤝";
+
     setMessage(resultMessage);
-    
-    // Update game history
-    const newHistory = [...gameHistory, { 
-      playerMove: move, 
-      aiMove: aiChoice, 
+
+    const newHistory = [...gameHistory, {
+      playerMove: move,
+      aiMove: aiChoice,
       result,
       timestamp: new Date().toLocaleTimeString(),
-      id: Date.now()
+      id: Date.now(),
     }];
-    
-    // Limit history size
-    const trimmedHistory = newHistory.length > MAX_HISTORY 
-      ? newHistory.slice(-MAX_HISTORY) 
+    const trimmedHistory = newHistory.length > MAX_HISTORY
+      ? newHistory.slice(-MAX_HISTORY)
       : newHistory;
-    
+
     setGameHistory(trimmedHistory);
-    
-    // Train model if using learning strategy
+
     if (aiStrategy === 'learning' && trimmedHistory.length >= 5) {
       setTimeout(() => trainModel(trimmedHistory), 100);
     }
-  }, [aiStrategy, gameHistory, getCounterMove, predictNextMove, trainModel]);
+  }, [aiStrategy, gameHistory, predictNextMove, trainModel]);
+
+  // Keyboard shortcuts: R / P / S to play. Ignore when typing in inputs or when busy.
+  useEffect(() => {
+    const handler = (e) => {
+      if (isLoading) return;
+      const target = e.target;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const key = e.key.toLowerCase();
+      const map = { r: 'Rock', p: 'Paper', s: 'Scissors' };
+      const move = map[key];
+      if (!move) return;
+      e.preventDefault();
+      handlePlayerMove(move);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handlePlayerMove, isLoading]);
 
   const stats = useMemo(() => {
-    if (gameHistory.length === 0) return { wins: 0, losses: 0, ties: 0, winRate: 0 };
-    
-    return gameHistory.reduce((acc, game) => {
+    if (gameHistory.length === 0) {
+      return { wins: 0, losses: 0, ties: 0, winRate: 0, lift: 0 };
+    }
+    const counts = gameHistory.reduce((acc, game) => {
       if (game.result === 'win') acc.wins++;
       else if (game.result === 'loss') acc.losses++;
       else acc.ties++;
       return acc;
-    }, { 
-      wins: 0, 
-      losses: 0, 
-      ties: 0, 
-      winRate: Math.round((gameHistory.filter(g => g.result === 'win').length / gameHistory.length) * 100) 
-    });
+    }, { wins: 0, losses: 0, ties: 0 });
+    const winRate = Math.round((counts.wins / gameHistory.length) * 100);
+    // Lift over the 33.3% baseline a uniformly random player would expect.
+    const lift = Math.round(winRate - 100 / 3);
+    return { ...counts, winRate, lift };
   }, [gameHistory]);
 
+  const predictability = useMemo(
+    () => Math.round((1 - playerMoveEntropy(gameHistory, 20)) * 100),
+    [gameHistory]
+  );
+
   const strategyDescriptions = {
-    random: "🎲 Completely random moves",
-    counter: "🔄 Counters your last move",
-    pattern: "🧠 Detects patterns in your play",
-    learning: "🤖 Neural network learns your style"
+    random: '🎲 Completely random moves',
+    counter: '🔄 Counters your last move',
+    pattern: '🧠 Detects patterns in your play',
+    learning: '🤖 Neural network learns your style',
+  };
+  const strategyKeys = Object.keys(strategyDescriptions);
+
+  // Roving tabindex for the strategy radiogroup.
+  const onStrategyKeyDown = (e) => {
+    const idx = strategyKeys.indexOf(aiStrategy);
+    let next = null;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = (idx + 1) % strategyKeys.length;
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = (idx - 1 + strategyKeys.length) % strategyKeys.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = strategyKeys.length - 1;
+    if (next === null) return;
+    // Skip disabled "learning" if model is unavailable.
+    let attempts = 0;
+    while (strategyKeys[next] === 'learning' && !model && attempts < strategyKeys.length) {
+      next = (next + (e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 1) + strategyKeys.length) % strategyKeys.length;
+      attempts++;
+    }
+    e.preventDefault();
+    setAiStrategy(strategyKeys[next]);
+    const el = document.getElementById(`strategy-${strategyKeys[next]}`);
+    if (el) el.focus();
   };
 
+  const playerWonClass = (r) =>
+    r === 'win' ? 'text-green-700 dark:text-green-300'
+      : r === 'loss' ? 'text-red-700 dark:text-red-300'
+        : 'text-gray-700 dark:text-gray-300';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-slate-900 p-4 motion-safe:transition-colors">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-700 focus:text-white focus:rounded"
+      >
+        Skip to main content
+      </a>
       <div className="max-w-4xl mx-auto">
+        <div className="flex justify-end mb-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-pressed={theme === 'dark'}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            className="px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 motion-safe:transition-colors"
+          >
+            <span aria-hidden="true">{theme === 'dark' ? '☀️' : '🌙'}</span>
+            <span className="ml-2 text-sm font-medium">{theme === 'dark' ? 'Light' : 'Dark'}</span>
+          </button>
+        </div>
+
         {error && <GameError message={error} onRetry={() => initializeModel()} />}
-        
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+
+        <main id="main-content" tabIndex={-1}>
+        <section
+          aria-labelledby="game-heading"
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 motion-safe:transition-colors"
+        >
           <div className="text-center mb-6">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">
-              🗿📄✂️ Rock Paper Scissors
+            <h1 id="game-heading" className="text-4xl font-bold text-gray-900 dark:text-gray-50 mb-2">
+              <span aria-hidden="true">🗿📄✂️ </span>Rock Paper Scissors
             </h1>
-            <p className="text-lg text-gray-600">AI-Powered Game with Machine Learning</p>
+            <p className="text-lg text-gray-700 dark:text-gray-300">AI-Powered Game with Machine Learning</p>
           </div>
-          
+
           {isLoading && (
             <div className="flex justify-center mb-6">
               <LoadingSpinner />
             </div>
           )}
-          
-          <div className="text-center mb-6">
-            <p className="text-xl font-medium text-gray-700 p-3 bg-gray-50 rounded-lg">
+
+          <div
+            ref={resultRegionRef}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="text-center mb-6"
+          >
+            <p className="text-xl font-medium text-gray-800 dark:text-gray-100 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg motion-safe:transition-colors">
               {message}
             </p>
           </div>
-          
-          <div className="flex justify-center space-x-4 mb-6">
-            {MOVE_NAMES.map((move, idx) => (
+
+          <div
+            role="group"
+            aria-label="Choose your move (keyboard shortcuts: R, P, S)"
+            className="flex justify-center space-x-4 mb-6"
+          >
+            {MOVE_NAMES.map((move) => (
               <button
                 key={move}
+                type="button"
                 onClick={() => handlePlayerMove(move)}
                 disabled={isLoading}
-                className="group flex flex-col items-center p-6 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                aria-label={`Play ${move} (shortcut ${move[0]})`}
+                className="group flex flex-col items-center p-6 bg-blue-600 text-white rounded-xl hover:bg-blue-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300 motion-safe:transition-all motion-safe:duration-200 motion-safe:transform motion-safe:hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
-                <span className="text-4xl mb-2">{MOVE_EMOJI[move]}</span>
+                <span className="text-4xl mb-2" aria-hidden="true">{MOVE_EMOJI[move]}</span>
                 <span className="text-lg font-medium">{move}</span>
               </button>
             ))}
           </div>
-          
+
           {playerMove && aiMove && (
-            <div className="bg-gray-50 rounded-lg p-6 mb-6">
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-6 mb-6 motion-safe:transition-colors">
               <div className="flex justify-center items-center space-x-8">
                 <div className="text-center">
-                  <div className="text-6xl mb-2">{MOVE_EMOJI[playerMove]}</div>
-                  <div className="text-lg font-medium text-gray-700">You chose</div>
-                  <div className="text-xl font-bold text-blue-600">{playerMove}</div>
+                  <div className="text-6xl mb-2" role="img" aria-label={playerMove}>{MOVE_EMOJI[playerMove]}</div>
+                  <div className="text-lg font-medium text-gray-700 dark:text-gray-200">You chose</div>
+                  <div className="text-xl font-bold text-blue-700 dark:text-blue-300">{playerMove}</div>
                 </div>
-                <div className="text-4xl">VS</div>
+                <div className="text-4xl text-gray-700 dark:text-gray-200" aria-hidden="true">VS</div>
                 <div className="text-center">
-                  <div className="text-6xl mb-2">{MOVE_EMOJI[aiMove]}</div>
-                  <div className="text-lg font-medium text-gray-700">AI chose</div>
-                  <div className="text-xl font-bold text-red-600">{aiMove}</div>
+                  <div className="text-6xl mb-2" role="img" aria-label={aiMove}>{MOVE_EMOJI[aiMove]}</div>
+                  <div className="text-lg font-medium text-gray-700 dark:text-gray-200">AI chose</div>
+                  <div className="text-xl font-bold text-red-700 dark:text-red-300">{aiMove}</div>
                 </div>
               </div>
             </div>
           )}
-        </div>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">📊 Game Statistics</h3>
+          <section
+            aria-labelledby="stats-heading"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 motion-safe:transition-colors"
+          >
+            <h2 id="stats-heading" className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">
+              <span aria-hidden="true">📊 </span>Game Statistics
+            </h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <StatCard label="Wins" value={stats.wins} color="green" />
               <StatCard label="Losses" value={stats.losses} color="red" />
               <StatCard label="Ties" value={stats.ties} color="gray" />
               <StatCard label="Win Rate" value={`${stats.winRate}%`} color="blue" />
             </div>
-            
+            {gameHistory.length > 0 && (
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <StatCard
+                  label="Lift vs Random"
+                  value={`${stats.lift >= 0 ? '+' : ''}${stats.lift}%`}
+                  color={stats.lift >= 0 ? 'green' : 'red'}
+                  srLabel="Win rate compared to a random baseline of 33%"
+                />
+                <StatCard
+                  label="Predictability"
+                  value={`${predictability}%`}
+                  color="purple"
+                  srLabel="Based on Shannon entropy of your last 20 moves"
+                />
+              </div>
+            )}
+
             {aiStrategy === 'learning' && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+              <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-3 motion-safe:transition-colors">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-purple-700">AI Model Accuracy</span>
-                  <span className="text-lg font-bold text-purple-600">{modelAccuracy}%</span>
+                  <span className="text-sm font-medium text-purple-800 dark:text-purple-200">AI Model Accuracy</span>
+                  <span className="text-lg font-bold text-purple-700 dark:text-purple-200">{modelAccuracy}%</span>
                 </div>
                 <div className="flex justify-between items-center mt-2">
-                  <span className="text-xs text-purple-600">
-                    Status: {modelStatus === 'loaded' ? '📂 Loaded from storage' : 
-                             modelStatus === 'trained' ? '🎓 Trained' : '🆕 New model'}
+                  <span className="text-xs text-purple-700 dark:text-purple-300">
+                    Status: {modelStatus === 'loaded' ? '📂 Loaded from storage' :
+                      modelStatus === 'trained' ? '🎓 Trained' : '🆕 New model'}
                   </span>
                 </div>
                 {isTraining && (
-                  <div className="flex items-center mt-2">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-600 mr-2"></div>
-                    <span className="text-xs text-purple-600">Training...</span>
+                  <div className="flex items-center mt-2" role="status">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-700 dark:border-purple-200 mr-2" aria-hidden="true"></div>
+                    <span className="text-xs text-purple-700 dark:text-purple-200">Training...</span>
                   </div>
                 )}
                 {isSaving && (
-                  <div className="flex items-center mt-2">
-                    <div className="animate-spin rounded-full h-3 w-3 border-b border-green-600 mr-2"></div>
-                    <span className="text-xs text-green-600">Saving model...</span>
+                  <div className="flex items-center mt-2" role="status">
+                    <div className="animate-spin rounded-full h-3 w-3 border-b border-green-700 dark:border-green-300 mr-2" aria-hidden="true"></div>
+                    <span className="text-xs text-green-700 dark:text-green-300">Saving model...</span>
                   </div>
                 )}
                 {lastSaved && !isSaving && (
-                  <div className="text-xs text-gray-500 mt-2">
-                    💾 Last saved: {new Date(lastSaved).toLocaleString()}
+                  <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                    <span aria-hidden="true">💾 </span>Last saved: {new Date(lastSaved).toLocaleString()}
+                  </div>
+                )}
+                {playerMove && aiMove && lastProbabilities && (
+                  <div className="mt-3" aria-label="Model's predicted distribution for your next move">
+                    <div className="text-xs font-medium text-purple-800 dark:text-purple-200 mb-1">Predicted next move (you):</div>
+                    {MOVE_NAMES.map((m, i) => (
+                      <div key={m} className="flex items-center text-xs mb-1">
+                        <span className="w-16 text-purple-800 dark:text-purple-200">{m}</span>
+                        <div className="flex-1 bg-purple-200 dark:bg-purple-800 rounded h-2 mr-2">
+                          <div
+                            className="bg-purple-600 dark:bg-purple-300 h-2 rounded motion-safe:transition-all"
+                            style={{ width: `${Math.round(lastProbabilities[i] * 100)}%` }}
+                          />
+                        </div>
+                        <span className="w-10 text-right text-purple-800 dark:text-purple-200">
+                          {Math.round(lastProbabilities[i] * 100)}%
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">🤖 AI Strategy</h3>
-            <div className="space-y-2 mb-4">
-              {Object.entries(strategyDescriptions).map(([strategy, description]) => {
+          <section
+            aria-labelledby="strategy-heading"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 motion-safe:transition-colors"
+          >
+            <h2 id="strategy-heading" className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">
+              <span aria-hidden="true">🤖 </span>AI Strategy
+            </h2>
+            <div
+              role="radiogroup"
+              aria-labelledby="strategy-heading"
+              onKeyDown={onStrategyKeyDown}
+              className="space-y-2 mb-4"
+            >
+              {strategyKeys.map((strategy) => {
+                const description = strategyDescriptions[strategy];
                 const needsModel = strategy === 'learning' && !model;
+                const checked = aiStrategy === strategy;
                 return (
                   <button
+                    id={`strategy-${strategy}`}
                     key={strategy}
-                    onClick={() => setAiStrategy(strategy)}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    tabIndex={checked ? 0 : -1}
+                    onClick={() => !needsModel && setAiStrategy(strategy)}
                     disabled={needsModel}
-                    className={`w-full text-left p-3 rounded-lg transition-colors ${
-                      aiStrategy === strategy
-                        ? 'bg-purple-100 border-2 border-purple-300 text-purple-800'
-                        : 'bg-gray-50 border-2 border-transparent hover:bg-gray-100'
+                    className={`w-full text-left p-3 rounded-lg motion-safe:transition-colors focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300 ${
+                      checked
+                        ? 'bg-purple-100 dark:bg-purple-900/40 border-2 border-purple-400 dark:border-purple-500 text-purple-900 dark:text-purple-100'
+                        : 'bg-gray-50 dark:bg-gray-900 border-2 border-transparent hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100'
                     } ${needsModel ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="font-medium capitalize">{strategy}</div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-gray-700 dark:text-gray-300">
                       {description}{needsModel && ' (model unavailable)'}
                     </div>
                   </button>
                 );
               })}
             </div>
-            
+
             <div className="space-y-2">
               {aiStrategy === 'learning' && (
                 <>
                   <button
+                    type="button"
                     onClick={() => saveModel(model)}
                     disabled={!model || isSaving || isTraining}
-                    className="w-full px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-green-300 motion-safe:transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? '💾 Saving...' : '💾 Save Model'}
                   </button>
                   {hasSavedModel && (
                     <button
+                      type="button"
                       onClick={async () => {
                         await deleteModel();
                         initializeModel(true);
                       }}
                       disabled={isLoadingModel}
-                      className="w-full px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50"
+                      className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-300 motion-safe:transition-colors font-medium disabled:opacity-50"
                     >
-                      🗑️ Delete Saved Model
+                      <span aria-hidden="true">🗑️ </span>Delete Saved Model
                     </button>
                   )}
                 </>
               )}
               <button
+                type="button"
                 onClick={() => initializeModel(true)}
-                className="w-full px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+                className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-300 motion-safe:transition-colors font-medium"
               >
-                🔄 Reset AI Model
+                <span aria-hidden="true">🔄 </span>Reset AI Model
               </button>
               <button
+                type="button"
                 onClick={clearStorage}
-                className="w-full px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
+                className="w-full px-4 py-3 bg-gray-700 text-white rounded-lg hover:bg-gray-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-gray-400 motion-safe:transition-colors font-medium"
               >
-                🗑️ Clear Game History
+                <span aria-hidden="true">🗑️ </span>Clear Game History
               </button>
             </div>
-          </div>
+          </section>
         </div>
 
         {gameHistory.length > 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-6 mt-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">📚 Recent Game History</h3>
-            <div className="max-h-64 overflow-y-auto">
-              <div className="space-y-2">
-                {gameHistory.slice(-10).reverse().map((game) => (
-                  <div key={game.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-4">
-<span className="text-2xl">{MOVE_EMOJI[game.playerMove]}</span>
-                    <span className="text-sm text-gray-500">vs</span>
-                      <span className="text-2xl">{MOVE_EMOJI[game.aiMove]}</span>
-                    </div>
-                    <div className="text-center">
-                      <span className={`font-bold ${
-                        game.result === 'win' ? 'text-green-600' : 
-                        game.result === 'loss' ? 'text-red-600' : 'text-gray-600'
-                      }`}>
-                        {game.result === 'win' ? 'You Won!' : 
-                         game.result === 'loss' ? 'AI Won!' : "Tie!"}
-                      </span>
-                      <div className="text-xs text-gray-500">{game.timestamp}</div>
-                    </div>
+          <section
+            aria-labelledby="history-heading"
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mt-6 motion-safe:transition-colors"
+          >
+            <h2 id="history-heading" className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">
+              <span aria-hidden="true">📚 </span>Recent Game History
+            </h2>
+            <ul className="max-h-64 overflow-y-auto space-y-2">
+              {gameHistory.slice(-10).reverse().map((game) => (
+                <li
+                  key={game.id}
+                  aria-label={`At ${game.timestamp}, you played ${game.playerMove}, AI played ${game.aiMove}, ${game.result === 'win' ? 'you won' : game.result === 'loss' ? 'AI won' : 'tie'}`}
+                  className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-900 rounded-lg motion-safe:transition-colors"
+                >
+                  <div className="flex items-center space-x-4">
+                    <span className="text-2xl" role="img" aria-label={game.playerMove}>{MOVE_EMOJI[game.playerMove]}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300" aria-hidden="true">vs</span>
+                    <span className="text-2xl" role="img" aria-label={game.aiMove}>{MOVE_EMOJI[game.aiMove]}</span>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
+                  <div className="text-center">
+                    <span className={`font-bold ${playerWonClass(game.result)}`}>
+                      {game.result === 'win' ? 'You Won!' : game.result === 'loss' ? 'AI Won!' : 'Tie!'}
+                    </span>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">{game.timestamp}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
+        </main>
       </div>
     </div>
   );

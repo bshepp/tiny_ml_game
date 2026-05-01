@@ -86,8 +86,8 @@ describe('App Component', () => {
 
     fireEvent.click(screen.getByText('counter'));
 
-    const counterButtons = screen.getAllByRole('button', { name: /counter/i });
-    const strategyButton = counterButtons.find((btn) => btn.textContent.includes('Counters'));
+    const counterRadios = screen.getAllByRole('radio', { name: /counter/i });
+    const strategyButton = counterRadios.find((btn) => btn.textContent.includes('Counters'));
     expect(strategyButton).toHaveClass('bg-purple-100');
   });
 
@@ -106,8 +106,8 @@ describe('App Component', () => {
       expect(screen.getByText(/model unavailable/i)).toBeInTheDocument();
     });
 
-    const learningButtons = screen.getAllByRole('button', { name: /learning/i });
-    const strategyButton = learningButtons.find((btn) => btn.textContent.includes('Neural'));
+    const learningRadios = screen.getAllByRole('radio', { name: /learning/i });
+    const strategyButton = learningRadios.find((btn) => btn.textContent.includes('Neural'));
     expect(strategyButton).toBeDisabled();
   });
 

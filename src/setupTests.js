@@ -7,6 +7,25 @@ import '@testing-library/jest-dom';
 // Mock TensorFlow.js for JSDOM environment
 jest.mock('@tensorflow/tfjs');
 
+// JSDOM doesn't implement matchMedia; the app uses it for theme detection.
+// Use a plain function (not jest.fn) so jest.clearAllMocks() doesn't strip it.
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}
+
 // Suppress console errors from TensorFlow and model initialization during tests.
 // These are expected in JSDOM since WebGL/WebAssembly aren't available.
 const originalError = console.error;

@@ -2,16 +2,32 @@ import { useEffect, useCallback, useRef } from 'react';
 
 const STORAGE_KEY = 'tiny-ml-game-data';
 
+const isStorageAvailable = () => {
+  try {
+    const testKey = '__tiny_ml_game_test__';
+    window.localStorage.setItem(testKey, '1');
+    window.localStorage.removeItem(testKey);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const useGameStorage = (gameHistory, setGameHistory) => {
   // Track whether we've completed the initial load. Without this, the
   // "save on change" effect would fire on mount with the empty default
   // state and overwrite any persisted history before the load effect runs.
   const hasLoadedRef = useRef(false);
+  const storageOkRef = useRef(isStorageAvailable());
 
   // Load data from localStorage on mount
   useEffect(() => {
+    if (!storageOkRef.current) {
+      hasLoadedRef.current = true;
+      return;
+    }
     try {
-      const savedData = localStorage.getItem(STORAGE_KEY);
+      const savedData = window.localStorage.getItem(STORAGE_KEY);
       if (savedData) {
         const parsedData = JSON.parse(savedData);
         if (parsedData.gameHistory && Array.isArray(parsedData.gameHistory)) {
@@ -27,22 +43,25 @@ export const useGameStorage = (gameHistory, setGameHistory) => {
 
   // Save data to localStorage whenever gameHistory changes (after initial load)
   useEffect(() => {
-    if (!hasLoadedRef.current) return;
+    if (!hasLoadedRef.current || !storageOkRef.current) return;
     try {
       const dataToSave = {
         gameHistory,
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (error) {
-      console.error('Error saving game data:', error);
+      // Silently swallow QuotaExceededError / Safari private-mode SecurityError.
+      if (error?.name !== 'QuotaExceededError' && error?.name !== 'SecurityError') {
+        console.error('Error saving game data:', error);
+      }
     }
   }, [gameHistory]);
 
   // Clear saved data
   const clearStorage = useCallback(() => {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      if (storageOkRef.current) window.localStorage.removeItem(STORAGE_KEY);
       setGameHistory([]);
     } catch (error) {
       console.error('Error clearing game data:', error);

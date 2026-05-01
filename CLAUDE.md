@@ -13,12 +13,13 @@ npm run deploy  # Deploy to GitHub Pages
 
 ## Architecture
 
-Single-page React app. No routing, no backend. All game logic, ML, and UI live in `src/App.js`.
+Single-page React app. No routing, no backend. UI, ML wiring, and game state live in `src/App.js`. Pure logic helpers extracted to `src/gameLogic.js`.
 
 ### Key Files
 
-- **App.js** — Main component: neural network model, game state, AI strategies, UI rendering
-- **hooks/useGameStorage.js** — localStorage persistence for game history
+- **App.js** — Main component: model lifecycle, game state, AI strategies, theme, UI rendering
+- **gameLogic.js** — Pure helpers: `MOVE_NAMES`, `MOVE_EMOJI`, `getCounterMove`, `getResult`, `encodeGameSequence`, `playerMoveEntropy`, sequence constants
+- **hooks/useGameStorage.js** — localStorage persistence for game history (with feature detection)
 - **hooks/useModelStorage.js** — IndexedDB persistence for trained TF.js model
 - **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Jest/JSDOM tests
 
@@ -41,7 +42,7 @@ Training: After each game in "learning" strategy, trains on the last 10 games wi
 
 ### Prediction Sampling
 
-`predictNextMove` does not use `argmax`. It blends model probabilities with a uniform distribution (20% randomness) and then samples from the resulting distribution. Without sampling, the AI would be deterministic for a given history and the "random factor" would have no effect.
+`predictNextMove` does not use `argmax`. It blends model probabilities with a uniform distribution and samples. The randomness factor anneals from 0.30 down to a 0.05 floor as history grows (`Math.max(0.05, 0.30 - 0.01 * history.length)`), letting the model commit to learned patterns over time. The resulting distribution is exposed via `lastProbabilities` and rendered as live bars in the UI.
 
 ### State Flow
 
@@ -50,10 +51,10 @@ Training: After each game in "learning" strategy, trains on the last 10 games wi
 3. Player clicks move → `handlePlayerMove()`
 4. AI strategy calculates response (switch on `aiStrategy`)
 5. Result added to `gameHistory` (capped at 50)
-6. If "learning" mode: `trainModel()` runs async after 100ms delay
-7. Stats recompute via `useMemo`
+6. If "learning" mode: `trainModel()` runs async after 100ms delay (trains on last `TRAINING_BATCH_SIZE = 25` games)
+7. Stats recompute via `useMemo` (`winRate`, `lift = winRate − 33`, `predictability` from `playerMoveEntropy`)
 8. History auto-saves to localStorage
-9. Model auto-saves to IndexedDB every 10 games
+9. Model auto-saves to IndexedDB on a `AUTO_SAVE_DEBOUNCE_MS = 1500` debounce (timer cleared on unmount)
 
 ### Error Handling
 
@@ -65,17 +66,22 @@ If model initialization fails, the app:
 
 ### Memory Management
 
-TensorFlow.js tensors must be manually disposed. Pattern used:
+TensorFlow.js tensors must be manually disposed. The codebase uses `tf.tidy` wherever practical:
 
 ```javascript
-let tensor = null;
+const { xs, ys } = tf.tidy(() => ({
+  xs: tf.tensor2d(inputs),
+  ys: tf.tensor2d(labels),
+}));
 try {
-  tensor = tf.tensor2d(...);
-  // use tensor
+  await model.fit(xs, ys, { epochs: 5, validationSplit: 0.2 });
 } finally {
-  if (tensor) tensor.dispose();
+  xs.dispose();
+  ys.dispose();
 }
 ```
+
+The initial warm-up call in `initializeModel()` is wrapped in `tf.tidy` so no intermediate tensors leak.
 
 ### Move Data
 
@@ -87,7 +93,31 @@ const MOVE_EMOJI = { Rock: '🗿', Paper: '📄', Scissors: '✂️' };
 
 ### Tailwind Note
 
-Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings instead (see `colorStyles` object in App.js).
+Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings (see `STAT_CARD_STYLES` / `STAT_VALUE_STYLES` in App.js). A regex `safelist` in `tailwind.config.js` covers color/shade combinations that are still composed dynamically, including `dark:`, `hover:`, `focus:`, `focus-visible:`, `motion-safe:`, and `group-hover:` variants.
+
+## Theme System
+
+Class-based dark mode (`darkMode: 'class'` in `tailwind.config.js`). Theme is stored in `tiny-ml-game-theme` (`'light'` | `'dark'`).
+
+- `getInitialTheme()` resolves: saved value → `matchMedia('(prefers-color-scheme: dark)')` → `'light'`
+- A `matchMedia` change listener tracks OS theme **only** when the user hasn't made a manual choice (tracked via `userSetThemeRef`)
+- The toggle button (top-right) sets `userSetThemeRef.current = true`, flips `theme`, and persists
+- An effect adds/removes the `dark` class on `document.documentElement`
+
+All color-bearing components ship matching `dark:` variants; transitions are gated behind `motion-safe:` to honor `prefers-reduced-motion`.
+
+## Accessibility (Section 508 / WCAG 2.1 AA)
+
+- Skip link to `<main id="main-content" tabIndex={-1}>`
+- Sectioning landmarks via `<section aria-labelledby>` with visible `<h2>` headings; emoji prefixes are `aria-hidden`
+- Errors use `role="alert"`; the result region uses `role="status"` with `aria-live="polite"` and `aria-atomic="true"`
+- Loading spinner exposes `role="status"`
+- Strategy picker is a true `role="radiogroup"` with `role="radio"`/`aria-checked` items, roving `tabindex`, and full arrow-key + Home/End navigation (skipping disabled options)
+- Move buttons announce their keyboard shortcut: e.g. `aria-label="Play Rock (shortcut R)"`
+- Global R / P / S keyboard shortcuts (ignored when typing in an input/textarea/contenteditable or when modifier keys are held)
+- All interactive elements have `focus-visible:ring-4` rings tuned for both light and dark themes
+- Game history rendered as `<ul><li>` with descriptive `aria-label` per entry; emoji glyphs use `role="img" aria-label={moveName}`
+- Color contrast bumped to AA (e.g. move buttons `bg-blue-600` instead of `bg-blue-500`)
 
 ## Testing
 
@@ -126,12 +156,19 @@ const {
 ## Known Limitations
 
 - Training is synchronous and can briefly block UI on slower devices
-- All game logic lives in App.js (~700 lines) — could benefit from decomposition
+- App.js is still large (~700 lines) — pure logic now lives in `gameLogic.js`, but UI/state could benefit from further decomposition
 - TF.js model initialization has a CJS/ESM interop issue in JSDOM that causes fallback to non-ML mode in tests
+- Full `@tensorflow/tfjs` bundle is shipped (no per-backend split yet)
 
 ## Storage Hooks
 
 `useGameStorage` uses a `hasLoadedRef` guard to skip the first save effect. Without it, the save effect would run on mount with the empty default state and overwrite persisted history before the load effect completed.
+
+Both `useGameStorage` and `useModelStorage` feature-detect localStorage availability (private mode, disabled storage, quota errors) and silently no-op when unavailable instead of crashing.
+
+## Test Setup
+
+`src/setupTests.js` polyfills `window.matchMedia` (used by the theme system) with a plain (non-`jest.fn`) implementation so that `jest.clearAllMocks()` calls in test suites don't strip the implementation out.
 
 ## Adding Features
 
