@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/tiny_ml_game/static/css/main.2e8aa867.css",
-    "main.js": "/tiny_ml_game/static/js/main.5c6390d7.js",
-    "static/js/453.79fb2dc0.chunk.js": "/tiny_ml_game/static/js/453.79fb2dc0.chunk.js",
-    "index.html": "/tiny_ml_game/index.html",
-    "main.2e8aa867.css.map": "/tiny_ml_game/static/css/main.2e8aa867.css.map",
-    "main.5c6390d7.js.map": "/tiny_ml_game/static/js/main.5c6390d7.js.map",
-    "453.79fb2dc0.chunk.js.map": "/tiny_ml_game/static/js/453.79fb2dc0.chunk.js.map"
+    "main.css": "/static/css/main.b41f4332.css",
+    "main.js": "/static/js/main.5632caeb.js",
+    "static/js/453.79fb2dc0.chunk.js": "/static/js/453.79fb2dc0.chunk.js",
+    "index.html": "/index.html",
+    "main.b41f4332.css.map": "/static/css/main.b41f4332.css.map",
+    "main.5632caeb.js.map": "/static/js/main.5632caeb.js.map",
+    "453.79fb2dc0.chunk.js.map": "/static/js/453.79fb2dc0.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.2e8aa867.css",
-    "static/js/main.5c6390d7.js"
+    "static/css/main.b41f4332.css",
+    "static/js/main.5632caeb.js"
   ]
 }
