@@ -100,6 +100,9 @@ Built to WCAG 2.1 AA / Section 508. Highlights: skip link, real `radiogroup` for
 
 ## Roadmap
 
+- **Section 508 / WCAG 2.1 AA conformance statement** — the app already targets AA (see [Accessibility](#accessibility)); next step is a published VPAT-style conformance statement in the About tab and an automated axe-core check in CI so regressions are caught.
+- **AI-agent accessible** — add an `llms.txt` and a small machine-readable manifest (game rules, move encoding, telemetry schema, public stats endpoint) so coding agents and research bots can interact with Roshambot programmatically. Keep `robots.txt` permissive for well-behaved AI crawlers.
+- **Claude.ai / MCP accessible** — expose the public stats endpoint (and eventually the HF dataset) through a tiny MCP server so Claude.ai, Claude Desktop, and other MCP-aware clients can query aggregate stats and pull the dataset card without scraping.
 - **Public dataset on Hugging Face** — once enough opt-in rounds are collected, publish a permissively-licensed dataset (likely CC0) of `(sequence, strategy, modelArch)` rows for anyone studying human RPS bias or training their own bots. Will include a dataset card with collection methodology, consent disclosure, and a "selection bias" caveat.
 - **HF Community blog post** — *"Three tiny architectures vs. human RPS players"*. Walks through the model design, the annealed-randomness sampling trick, aggregate win-rate results from the dataset, and a head-to-head against `iocaine powder` (the 1999 RoShamBo champion).
 - **AI vs AI vs `iocaine powder` mode** — let the three neural architectures and the classical bot play tournaments in-browser to feed the blog post a real comparison table.
