@@ -17,6 +17,7 @@ import Tabs from './components/Tabs';
 import StatsTab from './components/StatsTab';
 import AboutTab from './components/AboutTab';
 import ConsentBanner from './components/ConsentBanner';
+import StrategyInfoModal from './components/StrategyInfoModal';
 import './App.css';
 
 const MODEL_ARCH_STORAGE_KEY = 'tiny-ml-game-model-arch';
@@ -108,6 +109,7 @@ const App = () => {
   const [model, setModel] = useState(null);
   const [gameHistory, setGameHistory] = useState([]);
   const [aiStrategy, setAiStrategy] = useState('learning');
+  const [strategyInfoOpen, setStrategyInfoOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isTraining, setIsTraining] = useState(false);
@@ -747,9 +749,20 @@ const App = () => {
             aria-labelledby="strategy-heading"
             className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 motion-safe:transition-colors"
           >
-            <h2 id="strategy-heading" className="text-xl font-bold text-gray-900 dark:text-gray-50 mb-4">
-              <span aria-hidden="true">🤖 </span>AI Strategy
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="strategy-heading" className="text-xl font-bold text-gray-900 dark:text-gray-50">
+                <span aria-hidden="true">🤖 </span>AI Strategy
+              </h2>
+              <button
+                type="button"
+                onClick={() => setStrategyInfoOpen(true)}
+                aria-label="About AI strategies and model architectures"
+                className="ml-2 inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-purple-100 dark:hover:bg-purple-900/40 hover:text-purple-700 dark:hover:text-purple-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300 motion-safe:transition-colors text-sm font-bold"
+                title="About AI strategies"
+              >
+                <span aria-hidden="true">ℹ</span>
+              </button>
+            </div>
 
             {aiStrategy === 'learning' && (
               <div className="mb-4">
@@ -890,6 +903,7 @@ const App = () => {
       {telemetry.enabled && telemetry.consent === null && (
         <ConsentBanner onAccept={telemetry.grant} onDecline={telemetry.deny} />
       )}
+      <StrategyInfoModal open={strategyInfoOpen} onClose={() => setStrategyInfoOpen(false)} />
     </div>
   );
 };
