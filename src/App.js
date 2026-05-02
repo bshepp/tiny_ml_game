@@ -899,6 +899,16 @@ const App = () => {
         </div>
         )}
         </main>
+        <footer className="max-w-6xl mx-auto px-4 pb-6 text-center text-sm text-gray-600 dark:text-gray-400">
+          <a
+            href="https://github.com/bshepp/tiny_ml_game"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-purple-700 dark:hover:text-purple-300 underline focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300 rounded"
+          >
+            github.com/bshepp/tiny_ml_game
+          </a>
+        </footer>
       </div>
       {telemetry.enabled && telemetry.consent === null && (
         <ConsentBanner onAccept={telemetry.grant} onDecline={telemetry.deny} />
