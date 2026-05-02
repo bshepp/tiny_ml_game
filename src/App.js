@@ -107,7 +107,7 @@ const App = () => {
   const [message, setMessage] = useState('🎮 Choose your move to start!');
   const [model, setModel] = useState(null);
   const [gameHistory, setGameHistory] = useState([]);
-  const [aiStrategy, setAiStrategy] = useState('random');
+  const [aiStrategy, setAiStrategy] = useState('learning');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isTraining, setIsTraining] = useState(false);
@@ -209,11 +209,11 @@ const App = () => {
       if (loadedModel) {
         activeModel = loadedModel;
         setModelStatus('loaded');
-        setMessage('🧠 Loaded trained AI model — an AI-powered game with machine learning. Choose Rock, Paper, or Scissors!');
+        setMessage('🧠 Loaded trained AI model — an AI-powered game with machine learning.\nChoose Rock, Paper, or Scissors!');
       } else {
         activeModel = createAdvancedModel();
         setModelStatus('new');
-        setMessage('🤖 AI ready — an AI-powered game with machine learning. Choose Rock, Paper, or Scissors!');
+        setMessage('AI ready — an AI-powered game with machine learning.\nChoose Rock, Paper, or Scissors!');
         setModelAccuracy(0);
       }
 
@@ -500,10 +500,10 @@ const App = () => {
   );
 
   const strategyDescriptions = {
-    random: '🎲 Completely random moves',
-    counter: '🔄 Counters your last move',
-    pattern: '🧠 Detects patterns in your play',
     learning: '🤖 Neural network learns your style',
+    pattern: '🧠 Detects patterns in your play',
+    counter: '🔄 Counters your last move',
+    random: '🎲 Completely random moves',
   };
   const strategyKeys = Object.keys(strategyDescriptions);
 
@@ -616,7 +616,7 @@ const App = () => {
             aria-atomic="true"
             className="text-center mb-6"
           >
-            <p className="text-xl font-medium text-gray-800 dark:text-gray-100 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg motion-safe:transition-colors">
+            <p className="text-xl font-medium text-gray-800 dark:text-gray-100 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg motion-safe:transition-colors whitespace-pre-line">
               {message}
             </p>
           </div>
@@ -751,25 +751,27 @@ const App = () => {
               <span aria-hidden="true">🤖 </span>AI Strategy
             </h2>
 
-            <div className="mb-4">
-              <label htmlFor="model-arch-select" className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1">
-                Neural model architecture
-              </label>
-              <select
-                id="model-arch-select"
-                value={modelArch}
-                onChange={(e) => setModelArch(e.target.value)}
-                disabled={isLoading || isTraining}
-                className="w-full p-2 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300"
-              >
-                {MODEL_ARCHITECTURES.map((arch) => (
-                  <option key={arch} value={arch}>{ARCH_LABELS[arch]}</option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                {ARCH_DESCRIPTIONS[modelArch]}
-              </p>
-            </div>
+            {aiStrategy === 'learning' && (
+              <div className="mb-4">
+                <label htmlFor="model-arch-select" className="block text-sm font-medium text-gray-800 dark:text-gray-100 mb-1">
+                  Neural model architecture
+                </label>
+                <select
+                  id="model-arch-select"
+                  value={modelArch}
+                  onChange={(e) => setModelArch(e.target.value)}
+                  disabled={isLoading || isTraining}
+                  className="w-full p-2 rounded-lg bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300"
+                >
+                  {MODEL_ARCHITECTURES.map((arch) => (
+                    <option key={arch} value={arch}>{ARCH_LABELS[arch]}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+                  {ARCH_DESCRIPTIONS[modelArch]}
+                </p>
+              </div>
+            )}
 
             <div
               role="radiogroup"
