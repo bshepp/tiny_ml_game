@@ -230,3 +230,14 @@ Both `useGameStorage` and `useModelStorage` feature-detect localStorage availabi
 1. Update `createAdvancedModel()`
 2. Adjust `encodeGameSequence()` if input shape changes
 3. Update input shape constant (currently `[15]`)
+
+## Roadmap / Future Work
+
+Public-facing roadmap lives in `README.md`. Implementation notes for each item:
+
+- **HF dataset export** — DynamoDB → JSONL/Parquet job. Schema already matches what we'd publish: `{sessionId (hashed with random salt at export time), sequence, strategy, modelArch, schemaVersion, timestamp}`. Lambda or one-off `boto3` script under `infra/scripts/`. Dataset card needs explicit consent disclosure and a selection-bias caveat (only opt-in users).
+- **HF Community blog post** — outline drafted in chat: hook (humans aren't random) → 15-feature setup → three architectures side-by-side → annealed-randomness sampling rationale → aggregate win rates from telemetry → comparison with `iocaine powder` → dataset/repo links → limitations. Wait until ~500–1000 rounds across all three architectures before drafting.
+- **AI vs AI vs `iocaine powder` mode** — needs a tournament harness (probably `src/tournament.js`) that loops N rounds per matchup using each architecture's `predictNextMove` against the others and against a JS port of `iocaine powder`. Render a results matrix in a new tab or a sub-section of the Stats tab.
+- **TF.js backend split + WebGPU** — swap `@tensorflow/tfjs` for `@tensorflow/tfjs-core` + per-backend imports (`tfjs-backend-webgl`, `tfjs-backend-webgpu`). Detect WebGPU support and prefer it; fall back to WebGL. Surface the active backend in the About tab (already wired via `tfBackend`).
+- **CRA → Vite migration** — try a branch. Watch out for: Tailwind PostCSS config, `process.env.REACT_APP_*` → `import.meta.env.VITE_*`, `gh-pages -d dist`, and the TF.js mock path resolution.
+- **React 19 polish** — Actions for the Save/Delete model buttons; `use()` for the StatsTab fetch (currently a custom effect). Keep the suspense boundary local so the rest of the tab still renders.
