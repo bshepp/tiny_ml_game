@@ -113,7 +113,7 @@ data "archive_file" "lambda_zip" {
 resource "aws_lambda_function" "api" {
   function_name    = "${var.name}-api"
   role             = aws_iam_role.lambda.arn
-  runtime          = "nodejs20.x"
+  runtime          = "nodejs22.x"
   handler          = "index.handler"
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
@@ -138,6 +138,18 @@ resource "aws_lambda_function_url" "api" {
     allow_headers = ["content-type"]
     max_age       = 86400
   }
+}
+
+# Function URLs with authorization_type = "NONE" require an explicit
+# resource-based policy granting lambda:InvokeFunctionUrl to principal "*"
+# with a FunctionUrlAuthType = NONE condition. The AWS console adds this
+# automatically; Terraform does not.
+resource "aws_lambda_permission" "public_invoke_function_url" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.api.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
 }
 
 # ----- Outputs ---------------------------------------------------------------
