@@ -47,3 +47,7 @@ Thumbs.db
 
 # Log files
 *.log
+
+# Lambda invoke artifacts
+/out.json
+/payload.json
