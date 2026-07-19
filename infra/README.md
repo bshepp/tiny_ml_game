@@ -54,7 +54,9 @@ The DynamoDB table is deleted with all data. There is no S3 backup.
   validated: enum fields, `sessionId` limited to `[A-Za-z0-9_-]{1,64}`,
   `sequence` ≤ 10 entries each exactly `{playerMove, aiMove, result}`.
   Returns 204; 400 on validation failure; 413 if oversized.
-* `GET  /stats` — returns aggregated counts for the last 7 days.
+* `GET  /stats` — returns aggregated counts for the last 7 days. Responses
+  are cached for ~60 s per warm Lambda container, so fresh rounds can take
+  up to a minute to appear.
 
 Validation unit tests: `cd lambda && node --test`.
 

@@ -11,7 +11,17 @@ const TABLE = process.env.TABLE_NAME;
 const TTL_DAYS = 90;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+let ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+
+// Test-only seam: lets the unit tests stub DynamoDB without network access.
+export const setDdbClient = (client) => { ddb = client; };
+
+// Cache /stats per warm container. The endpoint is public and each miss runs
+// 7 DynamoDB queries; without this, hammering GET /stats scales read cost
+// linearly with request volume. Staleness of up to a minute is fine for a
+// global stats dashboard.
+const STATS_CACHE_MS = 60_000;
+let statsCache = { at: 0, payload: null };
 
 const VALID_MOVES = new Set(['Rock', 'Paper', 'Scissors']);
 const VALID_RESULTS = new Set(['win', 'loss', 'tie']);
@@ -107,6 +117,9 @@ export const handler = async (event) => {
     }
 
     if (method === 'GET' && path.endsWith('/stats')) {
+      if (statsCache.payload && Date.now() - statsCache.at < STATS_CACHE_MS) {
+        return json(200, statsCache.payload, origin);
+      }
       const days = 7;
       const today = new Date();
       const items = [];
@@ -138,7 +151,7 @@ export const handler = async (event) => {
       for (const k of Object.keys(byStrategy)) byStrategy[k].winRate = byStrategy[k].wins / byStrategy[k].n;
       for (const k of Object.keys(byArch)) byArch[k].winRate = byArch[k].wins / byArch[k].n;
 
-      return json(200, {
+      const payload = {
         totalRounds: items.length,
         byMove,
         byResult,
@@ -146,7 +159,9 @@ export const handler = async (event) => {
         byArch,
         windowDays: days,
         generatedAt: new Date().toISOString(),
-      }, origin);
+      };
+      statsCache = { at: Date.now(), payload };
+      return json(200, payload, origin);
     }
 
     return json(404, { error: 'not found' }, origin);

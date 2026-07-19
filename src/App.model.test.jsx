@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { StrictMode } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import App from './App';
 
@@ -61,6 +62,81 @@ describe('Model persistence and architecture identity', () => {
       const meta = JSON.parse(localStorage.getItem(META_KEY));
       expect(meta.arch).toBe('dense');
     });
+  });
+
+  test('overlapping rounds do not start a second training run', async () => {
+    const rounds = Array.from({ length: 25 }, (_, i) => ({
+      playerMove: 'Rock',
+      aiMove: 'Paper',
+      result: 'loss',
+      timestamp: '10:00:00',
+      id: i + 1,
+    }));
+    localStorage.setItem(
+      'tiny-ml-game-data',
+      JSON.stringify({ gameHistory: rounds, lastUpdated: Date.now() })
+    );
+
+    let resolveFit;
+    const hangingFit = vi.fn(() => new Promise((resolve) => { resolveFit = resolve; }));
+    const model = {
+      predict: vi.fn(() => ({
+        data: () => Promise.resolve(new Float32Array([0.33, 0.33, 0.34])),
+        dispose: vi.fn(),
+      })),
+      fit: hangingFit,
+      dispose: vi.fn(),
+      save: vi.fn().mockResolvedValue({}),
+    };
+    tf.io.listModels.mockResolvedValue({ [MODEL_KEY]: {} });
+    localStorage.setItem('tiny-ml-game-model-arch', 'dense');
+    localStorage.setItem(
+      META_KEY,
+      JSON.stringify({ exists: true, lastSaved: '2026-07-19T00:00:00.000Z', arch: 'dense' })
+    );
+    tf.loadLayersModel.mockResolvedValueOnce(model);
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /play rock/i }));
+    fireEvent.click(screen.getByRole('button', { name: /play scissors/i }));
+
+    // Both 100ms training timers fire while the first fit is still pending;
+    // only one fit may be in flight at a time.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(hangingFit).toHaveBeenCalledTimes(1);
+
+    resolveFit({ history: { acc: [0.8] } });
+    await act(async () => {
+      await Promise.resolve();
+    });
+  });
+
+  test('StrictMode remount does not force-recreate the model', async () => {
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // The saved model loads on both double-invoked mount effects; the arch
+    // effect must not add a spurious forced re-create (which would build a
+    // fresh network via tf.sequential and discard the loaded one).
+    expect(tf.loadLayersModel).toHaveBeenCalled();
+    expect(tf.sequential).not.toHaveBeenCalled();
   });
 
   test('Reset AI Model discards the saved model', async () => {

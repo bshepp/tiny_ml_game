@@ -154,6 +154,10 @@ const App = () => {
   // and the second would silently discard the first round.
   const gameHistoryRef = useRef(gameHistory);
   const roundIdRef = useRef(0);
+  // Re-entrancy guard for trainModel. Must be a ref, not the isTraining
+  // state: the 100ms-delayed timers capture render-time closures, so two
+  // quick rounds would both see stale isTraining=false and overlap fit().
+  const isTrainingRef = useRef(false);
 
   useEffect(() => {
     gameHistoryRef.current = gameHistory;
@@ -267,14 +271,14 @@ const App = () => {
   }, []);
 
   // Persist model arch + reinit when the user picks a different architecture.
-  // Skips the first run so we don't double-initialize on mount.
-  const archHasMountedRef = useRef(false);
+  // Compares against the previous value rather than using a "has mounted"
+  // flag: refs survive StrictMode's simulated remount, so a flag would make
+  // the re-run effect force-recreate the model on every dev remount.
+  const prevArchRef = useRef(modelArch);
   useEffect(() => {
     try { window.localStorage.setItem(MODEL_ARCH_STORAGE_KEY, modelArch); } catch { /* ignore */ }
-    if (!archHasMountedRef.current) {
-      archHasMountedRef.current = true;
-      return;
-    }
+    if (prevArchRef.current === modelArch) return;
+    prevArchRef.current = modelArch;
     initializeModel(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelArch]);
@@ -340,10 +344,11 @@ const App = () => {
   }, [model]);
 
   const trainModel = useCallback(async (history) => {
-    if (!model || history.length < TRAINING_BATCH_SIZE || isTraining) {
+    if (!model || history.length < TRAINING_BATCH_SIZE || isTrainingRef.current) {
       return;
     }
 
+    isTrainingRef.current = true;
     setIsTraining(true);
 
     try {
@@ -402,9 +407,10 @@ const App = () => {
     } catch (err) {
       console.error('Training error:', err);
     } finally {
+      isTrainingRef.current = false;
       setIsTraining(false);
     }
-  }, [model, isTraining, saveModel, modelArch]);
+  }, [model, saveModel, modelArch]);
 
   const handlePlayerMove = useCallback(async (move) => {
     setPlayerMove(move);

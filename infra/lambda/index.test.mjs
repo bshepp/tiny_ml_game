@@ -3,7 +3,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateRound, handler, MAX_BODY_BYTES } from './index.mjs';
+import { validateRound, handler, MAX_BODY_BYTES, setDdbClient } from './index.mjs';
 
 const clientRound = () => ({
   sessionId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
@@ -58,6 +58,30 @@ test('still rejects missing top-level moves', () => {
   const r = clientRound();
   delete r.playerMove;
   assert.equal(validateRound(r), 'bad playerMove');
+});
+
+test('caches /stats responses so repeated GETs skip DynamoDB', async () => {
+  let queries = 0;
+  setDdbClient({
+    send: async () => {
+      queries += 1;
+      return { Items: [] };
+    },
+  });
+  const event = {
+    requestContext: { http: { method: 'GET', path: '/stats' } },
+    headers: {},
+  };
+
+  const first = await handler(event);
+  assert.equal(first.statusCode, 200);
+  const queriesAfterFirst = queries;
+  assert.ok(queriesAfterFirst >= 1, 'first call must query DynamoDB');
+
+  const second = await handler(event);
+  assert.equal(second.statusCode, 200);
+  assert.equal(queries, queriesAfterFirst, 'second call within the cache window must not query');
+  assert.deepEqual(JSON.parse(second.body), JSON.parse(first.body));
 });
 
 test('handler rejects oversized bodies before parsing', async () => {

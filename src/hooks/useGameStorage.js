@@ -14,18 +14,22 @@ const isStorageAvailable = () => {
 };
 
 export const useGameStorage = (gameHistory, setGameHistory) => {
-  // Track whether we've completed the initial load. Without this, the
-  // "save on change" effect would fire on mount with the empty default
-  // state and overwrite any persisted history before the load effect runs.
-  const hasLoadedRef = useRef(false);
-  const storageOkRef = useRef(isStorageAvailable());
+  // The save effect must not run until state has diverged from the caller's
+  // initial value. A boolean "loaded" flag is not enough: both mount effects
+  // run in the same commit, so a flag set by the load effect is already true
+  // when the save effect fires with the still-empty initial state — and under
+  // StrictMode's double-invoked effects that overwrites real persisted
+  // history with []. Reference equality against the initial value is immune
+  // to effect ordering.
+  const initialHistoryRef = useRef(gameHistory);
+  const storageOkRef = useRef(null);
+  if (storageOkRef.current === null) {
+    storageOkRef.current = isStorageAvailable();
+  }
 
   // Load data from localStorage on mount
   useEffect(() => {
-    if (!storageOkRef.current) {
-      hasLoadedRef.current = true;
-      return;
-    }
+    if (!storageOkRef.current) return;
     try {
       const savedData = window.localStorage.getItem(STORAGE_KEY);
       if (savedData) {
@@ -36,14 +40,12 @@ export const useGameStorage = (gameHistory, setGameHistory) => {
       }
     } catch (error) {
       console.error('Error loading game data:', error);
-    } finally {
-      hasLoadedRef.current = true;
     }
   }, [setGameHistory]);
 
   // Save data to localStorage whenever gameHistory changes (after initial load)
   useEffect(() => {
-    if (!hasLoadedRef.current || !storageOkRef.current) return;
+    if (gameHistory === initialHistoryRef.current || !storageOkRef.current) return;
     try {
       const dataToSave = {
         gameHistory,
