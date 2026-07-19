@@ -7,7 +7,7 @@ const STRATEGY_DETAILS = [
     name: 'Learning',
     emoji: '🤖',
     summary: 'Neural network learns your style.',
-    body: 'After every round it trains on your most recent games and predicts what you\'ll play next. It then plays the move that beats that prediction. Predictions are sampled from a probability distribution (not argmax), with randomness annealing from 30% down to 5% as it gathers more data — so it commits to learned patterns over time. Pick the network architecture below.',
+    body: 'Once you\'ve played 25 rounds, it retrains after every round on your most recent 25 games and predicts what you\'ll play next. It then plays the move that beats that prediction. (Before round 25 there isn\'t enough data to train on, so it plays mostly at random.) Predictions are sampled from a probability distribution (not argmax), with randomness annealing from 30% down to 5% as it gathers more data — so it commits to learned patterns over time. Pick the network architecture below.',
   },
   {
     key: 'pattern',

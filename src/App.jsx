@@ -535,7 +535,7 @@ const App = () => {
   );
 
   const strategyDescriptions = {
-    learning: '🤖 Neural network learns your style',
+    learning: '🤖 Neural network learns your style (starts training at 25 rounds)',
     pattern: '🧠 Detects patterns in your play',
     counter: '🔄 Counters your last move',
     random: '🎲 Completely random moves',
@@ -750,6 +750,15 @@ const App = () => {
                       modelStatus === 'trained' ? '🎓 Trained' : '🆕 New model'}
                   </span>
                 </div>
+                {gameHistory.length < TRAINING_BATCH_SIZE ? (
+                  <div className="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                    Training begins after {TRAINING_BATCH_SIZE} rounds — {TRAINING_BATCH_SIZE - gameHistory.length} more to go. Until then the network plays mostly at random.
+                  </div>
+                ) : (
+                  <div className="text-xs text-purple-700 dark:text-purple-300 mt-1">
+                    Retrains on your last {TRAINING_BATCH_SIZE} rounds after every move.
+                  </div>
+                )}
                 {isTraining && (
                   <div className="flex items-center mt-2" role="status">
                     <div className="animate-spin rounded-full h-3 w-3 border-b border-purple-700 dark:border-purple-200 mr-2" aria-hidden="true"></div>

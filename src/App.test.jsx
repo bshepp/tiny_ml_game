@@ -243,6 +243,48 @@ describe('App Component', () => {
     });
   });
 
+  test('shows a training countdown until 25 rounds are reached', async () => {
+    const rounds = Array.from({ length: 20 }, (_, i) => ({
+      playerMove: 'Rock',
+      aiMove: 'Paper',
+      result: 'loss',
+      timestamp: '10:00:00',
+      id: i + 1,
+    }));
+    localStorage.setItem(
+      'tiny-ml-game-data',
+      JSON.stringify({ gameHistory: rounds, lastUpdated: Date.now() })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/training begins after 25 rounds/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/5 more to go/i)).toBeInTheDocument();
+  });
+
+  test('hides the training countdown once 25 rounds are reached', async () => {
+    const rounds = Array.from({ length: 25 }, (_, i) => ({
+      playerMove: 'Rock',
+      aiMove: 'Paper',
+      result: 'loss',
+      timestamp: '10:00:00',
+      id: i + 1,
+    }));
+    localStorage.setItem(
+      'tiny-ml-game-data',
+      JSON.stringify({ gameHistory: rounds, lastUpdated: Date.now() })
+    );
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Recent Game History/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/training begins after/i)).not.toBeInTheDocument();
+  });
+
   test('has reset and clear buttons', async () => {
     render(<App />);
 
