@@ -32,7 +32,7 @@ Switch between architectures from the dropdown above the strategy picker. All th
 | **GRU** | reshape (5, 3) → GRU(32) → Dense(16) → Dense(3) |
 | **Transformer** | single-head self-attention (d_model=8) → residual + layerNorm → FFN → residual + layerNorm → global average pool → Dense(3) |
 
-The model retrains on the last 25 rounds after every move you make. Predictions are sampled from the softmax (not argmax) with an annealed randomness floor so the model can commit to learned patterns over time.
+Once you've played 25 rounds, the model retrains on the last 25 after every move you make (before that there isn't enough data, so it plays mostly at random — the UI shows a countdown). Predictions are sampled from the softmax (not argmax) with an annealed randomness floor so the model can commit to learned patterns over time.
 
 ## Persistence
 

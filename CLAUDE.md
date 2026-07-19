@@ -152,7 +152,7 @@ Deployed via `npm run deploy` (gh-pages) to `roshambot.briansheppard.com`. The c
 Class-based dark mode (`darkMode: 'class'` in `tailwind.config.js`). Theme is stored in `tiny-ml-game-theme` (`'light'` | `'dark'`).
 
 - `getInitialTheme()` resolves: saved value → `matchMedia('(prefers-color-scheme: dark)')` → `'light'`
-- A `matchMedia` change listener tracks OS theme **only** when the user hasn't made a manual choice (tracked via `userSetThemeRef`)
+- A `matchMedia` change listener tracks OS theme **only** when no explicit choice is persisted (it bails if `tiny-ml-game-theme` holds a saved value; `userSetThemeRef` gates persistence, not the listener)
 - The toggle button (top-right) sets `userSetThemeRef.current = true`, flips `theme`, and persists
 - An effect adds/removes the `dark` class on `document.documentElement`
 
