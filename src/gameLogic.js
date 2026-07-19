@@ -36,10 +36,15 @@ export const getResult = (playerMove, aiMove) => {
 /**
  * Encodes the last 5 games into a flat 15-feature vector,
  * normalized to 0..1. Each step contributes (playerIdx, aiIdx, resultIdx).
+ *
+ * Short histories are right-aligned: the most recent game always occupies
+ * the final timestep, with zero-padding at the front. Otherwise the GRU and
+ * transformer would see the padding as the most recent moves.
  */
 export const encodeGameSequence = (history) => {
   const sequence = new Array(SEQUENCE_FEATURES).fill(0);
   const recent = history.slice(-SEQUENCE_LENGTH);
+  const offset = SEQUENCE_LENGTH - recent.length;
 
   recent.forEach((game, idx) => {
     const playerIdx = MOVE_NAMES.indexOf(game.playerMove);
@@ -47,9 +52,10 @@ export const encodeGameSequence = (history) => {
     const resultIdx = game.result === 'win' ? 0 : game.result === 'loss' ? 1 : 2;
 
     if (playerIdx !== -1 && aiIdx !== -1) {
-      sequence[idx * FEATURES_PER_STEP] = playerIdx / 2;
-      sequence[idx * FEATURES_PER_STEP + 1] = aiIdx / 2;
-      sequence[idx * FEATURES_PER_STEP + 2] = resultIdx / 2;
+      const step = offset + idx;
+      sequence[step * FEATURES_PER_STEP] = playerIdx / 2;
+      sequence[step * FEATURES_PER_STEP + 1] = aiIdx / 2;
+      sequence[step * FEATURES_PER_STEP + 2] = resultIdx / 2;
     }
   });
 

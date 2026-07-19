@@ -285,6 +285,32 @@ describe('App Component', () => {
     expect(screen.queryByText(/training begins after/i)).not.toBeInTheDocument();
   });
 
+  test('radiogroup stays keyboard-reachable while the model is loading', async () => {
+    // Model load never resolves: the checked "learning" radio is disabled,
+    // so another radio must carry tabIndex 0 or the group drops out of the
+    // Tab order entirely.
+    tf.loadLayersModel.mockImplementationOnce(() => new Promise(() => {}));
+
+    render(<App />);
+
+    const patternRadios = await screen.findAllByRole('radio', { name: /pattern/i });
+    const patternRadio = patternRadios.find((btn) => btn.textContent.includes('Detects'));
+    expect(patternRadio).toHaveAttribute('tabindex', '0');
+  });
+
+  test('emoji inside the live result region are hidden from screen readers', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    // Message is "🧠 Loaded trained AI model — ..."; the glyph must sit in
+    // its own aria-hidden span so it isn't read aloud by the live region.
+    const emojiSpan = screen.getByText('🧠');
+    expect(emojiSpan).toHaveAttribute('aria-hidden', 'true');
+  });
+
   test('has reset and clear buttons', async () => {
     render(<App />);
 

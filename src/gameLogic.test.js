@@ -59,11 +59,31 @@ describe('encodeGameSequence', () => {
     }
   });
 
-  test('normalizes Scissors=1 and win=0 correctly', () => {
+  test('normalizes Scissors=1 and win=0 correctly (single game, last slot)', () => {
     const seq = encodeGameSequence([{ playerMove: 'Scissors', aiMove: 'Scissors', result: 'win' }]);
-    expect(seq[0]).toBe(1);
-    expect(seq[1]).toBe(1);
-    expect(seq[2]).toBe(0);
+    // Right-aligned: a single game occupies the most-recent timestep (slot 4).
+    expect(seq[12]).toBe(1);
+    expect(seq[13]).toBe(1);
+    expect(seq[14]).toBe(0);
+    // Earlier timesteps are padding.
+    expect(seq.slice(0, 12).every((v) => v === 0)).toBe(true);
+  });
+
+  test('right-aligns short histories so the latest game is always at the last timestep', () => {
+    const older = { playerMove: 'Rock', aiMove: 'Rock', result: 'tie' };
+    const latest = { playerMove: 'Paper', aiMove: 'Scissors', result: 'loss' };
+    const seq = encodeGameSequence([older, older, latest]);
+
+    // Latest game must sit at timestep 4 regardless of history length,
+    // so the recurrent/attention models see padding as the distant past,
+    // not as the most recent moves.
+    expect(seq[12]).toBe(0.5); // Paper
+    expect(seq[13]).toBe(1); // Scissors
+    expect(seq[14]).toBe(0.5); // loss
+    // The two older games fill timesteps 2 and 3; 0 and 1 are padding.
+    expect(seq[6]).toBe(0); // Rock at timestep 2
+    expect(seq[8]).toBe(1); // tie
+    expect(seq.slice(0, 6).every((v) => v === 0)).toBe(true);
   });
 });
 

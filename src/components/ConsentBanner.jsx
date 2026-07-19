@@ -2,7 +2,7 @@ import React from 'react';
 
 const ConsentBanner = ({ onAccept, onDecline }) => (
   <div
-    role="region"
+    role="status"
     aria-label="Anonymous data collection"
     className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:right-4 sm:max-w-md z-50 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-2xl shadow-2xl p-4 motion-safe:transition-colors"
   >

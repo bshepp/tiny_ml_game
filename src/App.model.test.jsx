@@ -64,6 +64,35 @@ describe('Model persistence and architecture identity', () => {
     });
   });
 
+  test('a round with training leaks no mock tensors', async () => {
+    const rounds = Array.from({ length: 25 }, (_, i) => ({
+      playerMove: 'Rock',
+      aiMove: 'Paper',
+      result: 'loss',
+      timestamp: '10:00:00',
+      id: i + 1,
+    }));
+    localStorage.setItem(
+      'tiny-ml-game-data',
+      JSON.stringify({ gameHistory: rounds, lastUpdated: Date.now() })
+    );
+
+    render(<App />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /play rock/i }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+
+    // Prediction + training ran (non-vacuity guards)…
+    expect(tf.tensor2d).toHaveBeenCalled();
+    // …and every tensor created along the way was disposed.
+    expect(tf.memory().numTensors).toBe(0);
+  });
+
   test('overlapping rounds do not start a second training run', async () => {
     const rounds = Array.from({ length: 25 }, (_, i) => ({
       playerMove: 'Rock',
@@ -112,9 +141,11 @@ describe('Model persistence and architecture identity', () => {
     });
     expect(hangingFit).toHaveBeenCalledTimes(1);
 
-    resolveFit({ history: { acc: [0.8] } });
-    await act(async () => {
-      await Promise.resolve();
+    // Displayed accuracy must come from the validation split, not the
+    // (optimistic) training accuracy.
+    resolveFit({ history: { acc: [0.9], val_acc: [0.62] } });
+    await waitFor(() => {
+      expect(screen.getByText('62%')).toBeInTheDocument();
     });
   });
 

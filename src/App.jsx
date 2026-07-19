@@ -14,6 +14,7 @@ import {
 } from './gameLogic';
 import { createModel, MODEL_ARCHITECTURES, ARCH_LABELS, ARCH_DESCRIPTIONS } from './models';
 import Tabs from './components/Tabs';
+import ErrorBoundary from './components/ErrorBoundary';
 import StatsTab from './components/StatsTab';
 import AboutTab from './components/AboutTab';
 import ConsentBanner from './components/ConsentBanner';
@@ -27,6 +28,21 @@ const TRAINING_BATCH_SIZE = 25;
 const AUTO_SAVE_DEBOUNCE_MS = 1500;
 const THEME_STORAGE_KEY = 'tiny-ml-game-theme';
 const SHORTCUTS_STORAGE_KEY = 'tiny-ml-game-shortcuts';
+
+// Renders text with emoji wrapped in aria-hidden spans, so live regions
+// announce the words but not the glyphs ("You win!" rather than
+// "You win! party popper").
+const EMOJI_SPLIT_RE = /(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)/gu;
+const TextWithHiddenEmoji = ({ text }) =>
+  text.split(EMOJI_SPLIT_RE).map((part, i) =>
+    /^\p{Extended_Pictographic}/u.test(part) ? (
+      // eslint-disable-next-line react/no-array-index-key
+      <span key={i} aria-hidden="true">{part}</span>
+    ) : (
+      // eslint-disable-next-line react/no-array-index-key
+      <React.Fragment key={i}>{part}</React.Fragment>
+    )
+  );
 
 const GameError = ({ message, onRetry }) => (
   <div
@@ -386,7 +402,10 @@ const App = () => {
             validationSplit: 0.2,
           });
 
-          const accuracy = trainResult.history.acc || trainResult.history.accuracy;
+          // Prefer validation accuracy — training accuracy on ≤20 samples
+          // wildly overstates model skill.
+          const h = trainResult.history;
+          const accuracy = h.val_acc || h.val_accuracy || h.acc || h.accuracy;
           if (accuracy && accuracy.length > 0) {
             const newAccuracy = Math.round(accuracy[accuracy.length - 1] * 100);
             setModelAccuracy(newAccuracy);
@@ -610,7 +629,9 @@ const App = () => {
 
         {activeTab === 'stats' && (
           <div role="tabpanel" id="tabpanel-stats" aria-labelledby="tab-stats">
-            <StatsTab />
+            <ErrorBoundary>
+              <StatsTab />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -658,7 +679,7 @@ const App = () => {
             className="text-center mb-6"
           >
             <p className="text-xl font-medium text-gray-800 dark:text-gray-100 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg motion-safe:transition-colors whitespace-pre-line">
-              {message}
+              <TextWithHiddenEmoji text={message} />
             </p>
           </div>
 
@@ -856,6 +877,12 @@ const App = () => {
                 const description = strategyDescriptions[strategy];
                 const needsModel = strategy === 'learning' && !model;
                 const checked = aiStrategy === strategy;
+                // If the checked radio is disabled (learning while the model
+                // loads), hand its tab stop to the first enabled option so
+                // the whole group doesn't fall out of the Tab order.
+                const checkedIsDisabled = aiStrategy === 'learning' && !model;
+                const isFallbackTabStop =
+                  checkedIsDisabled && strategy === strategyKeys.find((s) => s !== 'learning');
                 return (
                   <button
                     id={`strategy-${strategy}`}
@@ -863,7 +890,7 @@ const App = () => {
                     type="button"
                     role="radio"
                     aria-checked={checked}
-                    tabIndex={checked ? 0 : -1}
+                    tabIndex={(checked && !needsModel) || isFallbackTabStop ? 0 : -1}
                     onClick={() => !needsModel && setAiStrategy(strategy)}
                     disabled={needsModel}
                     className={`w-full text-left p-3 rounded-lg motion-safe:transition-colors focus:outline-none focus-visible:ring-4 focus-visible:ring-purple-300 ${

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import * as tf from '@tensorflow/tfjs';
 
 const MODEL_STORAGE_KEY = 'indexeddb://tiny-ml-game-model';
@@ -31,6 +31,9 @@ const safeRemoveItem = (key) => {
  */
 export const useModelStorage = () => {
   const [isSaving, setIsSaving] = useState(false);
+  // Ref-based re-entrancy guard: two synchronous saveModel calls both see
+  // the stale isSaving state, so state alone can't prevent overlapping saves.
+  const isSavingRef = useRef(false);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
   const [lastSaved, setLastSaved] = useState(() => {
     try {
@@ -55,8 +58,9 @@ export const useModelStorage = () => {
    * the weights, so a later load can refuse a mismatched network.
    */
   const saveModel = useCallback(async (model, arch) => {
-    if (!model || isSaving) return false;
+    if (!model || isSavingRef.current) return false;
 
+    isSavingRef.current = true;
     setIsSaving(true);
     try {
       await model.save(MODEL_STORAGE_KEY);
@@ -74,9 +78,10 @@ export const useModelStorage = () => {
       console.error('Error saving model:', error);
       return false;
     } finally {
+      isSavingRef.current = false;
       setIsSaving(false);
     }
-  }, [isSaving]);
+  }, []);
 
   /**
    * Load a previously saved model from IndexedDB.
@@ -104,15 +109,16 @@ export const useModelStorage = () => {
       // Model doesn't exist yet - this is expected on first run
       if (error.message?.includes('not found') || error.message?.includes('Cannot find')) {
         console.log('No saved model found, will create new one');
+        // Clear stale metadata — but only when the model is genuinely gone.
+        // A transient IndexedDB failure is not proof of that, and wiping the
+        // metadata would discard the arch tag and "saved model" status.
+        safeRemoveItem(MODEL_META_KEY);
+        setHasSavedModel(false);
+        setLastSaved(null);
       } else {
         console.error('Error loading model:', error);
       }
-      
-      // Clear stale metadata
-      safeRemoveItem(MODEL_META_KEY);
-      setHasSavedModel(false);
-      setLastSaved(null);
-      
+
       return null;
     } finally {
       setIsLoadingModel(false);

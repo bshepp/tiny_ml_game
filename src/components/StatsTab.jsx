@@ -1,18 +1,21 @@
 // Global stats dashboard. Fetches aggregate stats from the telemetry API
 // and renders simple bar charts. Degrades gracefully when no API is configured.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { fetchStats, telemetryEnabled } from '../api';
 
 const Bar = ({ label, value, total, color = 'purple' }) => {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  // -700 fills clear WCAG 1.4.11's 3:1 against the gray-200 track in light
+  // mode (green-500 was 1.84:1); the -400 fills already clear it on the
+  // dark gray-700 track.
   const colorClass = {
-    purple: 'bg-purple-500 dark:bg-purple-400',
-    green: 'bg-green-500 dark:bg-green-400',
-    red: 'bg-red-500 dark:bg-red-400',
-    blue: 'bg-blue-500 dark:bg-blue-400',
-    yellow: 'bg-yellow-500 dark:bg-yellow-400',
-  }[color] || 'bg-purple-500 dark:bg-purple-400';
+    purple: 'bg-purple-700 dark:bg-purple-400',
+    green: 'bg-green-700 dark:bg-green-400',
+    red: 'bg-red-700 dark:bg-red-400',
+    blue: 'bg-blue-700 dark:bg-blue-400',
+    yellow: 'bg-yellow-700 dark:bg-yellow-400',
+  }[color] || 'bg-purple-700 dark:bg-purple-400';
 
   return (
     <div className="mb-2">
@@ -41,14 +44,19 @@ const Bar = ({ label, value, total, color = 'purple' }) => {
 
 const StatsTab = () => {
   const [state, setState] = useState({ loading: true, error: null, data: null });
+  // Monotonic request id: only the latest in-flight load may apply its
+  // result, so an older slow response can't overwrite a newer one.
+  const requestIdRef = useRef(0);
 
   const load = async () => {
+    const requestId = ++requestIdRef.current;
     setState({ loading: true, error: null, data: null });
     if (!telemetryEnabled()) {
       setState({ loading: false, error: 'no-api', data: null });
       return;
     }
     const res = await fetchStats();
+    if (requestIdRef.current !== requestId) return;
     if (res.ok) setState({ loading: false, error: null, data: res.data });
     else setState({ loading: false, error: res.error || 'fetch-failed', data: null });
   };
@@ -159,7 +167,7 @@ const StatsTab = () => {
               <li key={k} className="flex justify-between text-sm">
                 <span className="capitalize text-gray-800 dark:text-gray-100">{k}</span>
                 <span className="text-gray-600 dark:text-gray-300">
-                  {v.n?.toLocaleString?.() || 0} rounds · player wins {Math.round((v.winRate || 0) * 100)}%
+                  {(v?.n ?? 0).toLocaleString()} rounds · player wins {Math.round((v?.winRate || 0) * 100)}%
                 </span>
               </li>
             ))}
@@ -180,7 +188,7 @@ const StatsTab = () => {
               <li key={k} className="flex justify-between text-sm">
                 <span className="capitalize text-gray-800 dark:text-gray-100">{k}</span>
                 <span className="text-gray-600 dark:text-gray-300">
-                  {v.n?.toLocaleString?.() || 0} rounds · player wins {Math.round((v.winRate || 0) * 100)}%
+                  {(v?.n ?? 0).toLocaleString()} rounds · player wins {Math.round((v?.winRate || 0) * 100)}%
                 </span>
               </li>
             ))}

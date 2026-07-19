@@ -34,7 +34,8 @@ Single-page React app built with Vite (Vitest for tests). No routing, no backend
 - **hooks/useModelStorage.js** — IndexedDB persistence for trained TF.js model
 - **hooks/useTelemetry.js** — Consent state (`tiny-ml-game-consent`), stable session id (`tiny-ml-game-session-id`), `recordRound(payload)` fire-and-forget
 - **infra/** — Terraform for AWS Lambda Function URL + DynamoDB. See `infra/README.md`.
-- **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Vitest/jsdom tests, applied via the `test.alias` entry in `vite.config.js` (extended with `tf.input`, `layerNormalization`, `reshape`, `add`, `softmax`, `dot`, `globalAveragePooling1d`, chainable `apply` for the functional API)
+- **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Vitest/jsdom tests, applied via the `test.alias` entry in `vite.config.js` (extended with `tf.input`, `layerNormalization`, `reshape`, `add`, `softmax`, `dot`, `globalAveragePooling1d`, chainable `apply` for the functional API). Tracks live tensors with real `tidy` scope semantics — `tf.memory().numTensors` counts undisposed mock tensors, so tests can assert leak-freedom
+- **components/ErrorBoundary.jsx** — Class-based boundary with a recoverable `role="alert"` fallback; wraps the Global Stats tab so malformed API data can't white-screen the app
 
 ### Neural Network
 
@@ -51,7 +52,7 @@ Hidden: Dense(128, relu, L2, dropout 0.3)
 Output: Dense(3, softmax) → probability for Rock/Paper/Scissors
 ```
 
-Training: In the "learning" strategy, once at least 25 rounds have been played (`TRAINING_BATCH_SIZE = 25`), each round triggers training on the last 25 games (3 epochs, 20% validation split). Each sample uses only the games that preceded it as context, so the label isn't leaked into the input.
+Training: In the "learning" strategy, once at least 25 rounds have been played (`TRAINING_BATCH_SIZE = 25`), each round triggers training on the last 25 games (3 epochs, 20% validation split). Each sample uses only the games that preceded it as context, so the label isn't leaked into the input. The displayed "AI Model Accuracy" is the final-epoch **validation** accuracy (falls back to training accuracy if the split is unavailable). `encodeGameSequence` right-aligns short histories — the most recent round is always the last timestep, with zero-padding at the front — so the GRU/transformer never mistake padding for recent moves.
 
 ### Prediction Sampling
 

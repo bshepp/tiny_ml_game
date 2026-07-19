@@ -5,24 +5,49 @@
 
 import { vi } from 'vitest';
 
-const createMockTensor = (shape = [1, 1]) => ({
-  shape,
-  dtype: 'float32',
-  dispose: vi.fn(),
-  data: vi.fn().mockResolvedValue(new Float32Array([0.33, 0.33, 0.34])),
-  arraySync: vi.fn().mockReturnValue([[0.33, 0.33, 0.34]]),
-  dataSync: vi.fn().mockReturnValue(new Float32Array([0.33, 0.33, 0.34])),
-});
+// Live-tensor accounting: tf.memory().numTensors reflects created-but-not-
+// disposed mock tensors, so tests can assert the app leaks nothing.
+let liveTensors = 0;
+const tidyScopes = [];
+
+const createMockTensor = (shape = [1, 1]) => {
+  liveTensors += 1;
+  const tensor = {
+    shape,
+    dtype: 'float32',
+    disposed: false,
+    data: vi.fn().mockResolvedValue(new Float32Array([0.33, 0.33, 0.34])),
+    arraySync: vi.fn().mockReturnValue([[0.33, 0.33, 0.34]]),
+    dataSync: vi.fn().mockReturnValue(new Float32Array([0.33, 0.33, 0.34])),
+  };
+  tensor.dispose = vi.fn(() => {
+    if (!tensor.disposed) {
+      tensor.disposed = true;
+      liveTensors -= 1;
+    }
+  });
+  if (tidyScopes.length > 0) {
+    tidyScopes[tidyScopes.length - 1].push(tensor);
+  }
+  return tensor;
+};
+
+const isMockTensor = (v) =>
+  !!v && typeof v === 'object' && typeof v.dispose === 'function' && 'shape' in v;
 
 const createMockModel = () => {
   const model = {
     add: vi.fn(),
-    predict: vi.fn().mockReturnValue(createMockTensor([1, 3])),
+    // A fresh tensor per call, like real TF.js — a shared mockReturnValue
+    // tensor would escape tidy scopes and break dispose accounting.
+    predict: vi.fn(() => createMockTensor([1, 3])),
     fit: vi.fn().mockResolvedValue({
       history: {
         loss: [0.5, 0.4, 0.3],
         accuracy: [0.6, 0.7, 0.8],
         acc: [0.6, 0.7, 0.8],
+        val_acc: [0.45, 0.5, 0.55],
+        val_accuracy: [0.45, 0.5, 0.55],
       },
     }),
     compile: vi.fn(),
@@ -95,12 +120,33 @@ const tf = {
     adagrad: vi.fn(() => ({})),
   },
 
-  // Memory management
+  // Memory management. tidy mirrors the real semantics: tensors created
+  // inside the callback are disposed unless they're part of the return value.
   dispose: vi.fn(),
   disposeVariables: vi.fn(),
-  tidy: vi.fn((fn) => fn()),
+  tidy: vi.fn((fn) => {
+    const scope = [];
+    tidyScopes.push(scope);
+    try {
+      const out = fn();
+      const kept = new Set();
+      if (isMockTensor(out)) {
+        kept.add(out);
+      } else if (out && typeof out === 'object') {
+        Object.values(out).forEach((v) => {
+          if (isMockTensor(v)) kept.add(v);
+        });
+      }
+      scope.forEach((t) => {
+        if (!kept.has(t)) t.dispose();
+      });
+      return out;
+    } finally {
+      tidyScopes.pop();
+    }
+  }),
   keep: vi.fn((tensor) => tensor),
-  memory: vi.fn(() => ({ numTensors: 0, numBytes: 0 })),
+  memory: vi.fn(() => ({ numTensors: liveTensors, numBytes: 0 })),
 
   // Math operations
   add: vi.fn(() => createMockTensor()),
