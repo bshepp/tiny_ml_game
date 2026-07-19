@@ -75,6 +75,7 @@ src/
 │   ├── StatsTab.jsx                # Global stats dashboard
 │   ├── AboutTab.jsx                # Project/runtime info, consent reset
 │   ├── ConsentBanner.jsx           # Opt-in telemetry prompt
+│   ├── ErrorBoundary.jsx           # Recoverable fallback for render errors
 │   └── StrategyInfoModal.jsx       # Strategy/architecture explainer dialog
 ├── hooks/
 │   ├── useGameStorage.js           # localStorage for game history
