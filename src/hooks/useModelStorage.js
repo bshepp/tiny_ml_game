@@ -50,17 +50,19 @@ export const useModelStorage = () => {
   });
 
   /**
-   * Save the current model to IndexedDB
+   * Save the current model to IndexedDB.
+   * `arch` tags the single storage slot with the architecture that produced
+   * the weights, so a later load can refuse a mismatched network.
    */
-  const saveModel = useCallback(async (model) => {
+  const saveModel = useCallback(async (model, arch) => {
     if (!model || isSaving) return false;
 
     setIsSaving(true);
     try {
       await model.save(MODEL_STORAGE_KEY);
-      
+
       const now = new Date().toISOString();
-      const meta = { exists: true, lastSaved: now };
+      const meta = { exists: true, lastSaved: now, arch };
       safeSetItem(MODEL_META_KEY, JSON.stringify(meta));
       
       setLastSaved(now);
@@ -77,10 +79,22 @@ export const useModelStorage = () => {
   }, [isSaving]);
 
   /**
-   * Load a previously saved model from IndexedDB
-   * Returns the loaded model or null if no model exists
+   * Load a previously saved model from IndexedDB.
+   * Returns the loaded model, or null if none exists or the saved model was
+   * trained under a different architecture than `expectedArch` (all archs
+   * share one storage slot; loading mismatched weights would silently swap
+   * the network out from under the UI).
    */
-  const loadModel = useCallback(async () => {
+  const loadModel = useCallback(async (expectedArch) => {
+    try {
+      const meta = JSON.parse(safeGetItem(MODEL_META_KEY));
+      if (meta?.arch && expectedArch && meta.arch !== expectedArch) {
+        return null;
+      }
+    } catch {
+      /* unreadable metadata — fall through and try the load */
+    }
+
     setIsLoadingModel(true);
     try {
       const model = await tf.loadLayersModel(MODEL_STORAGE_KEY);

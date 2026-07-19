@@ -108,6 +108,7 @@ data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/lambda"
   output_path = "${path.module}/build/lambda.zip"
+  excludes    = ["index.test.mjs"]
 }
 
 resource "aws_lambda_function" "api" {
@@ -119,6 +120,9 @@ resource "aws_lambda_function" "api" {
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
   timeout          = 10
   memory_size      = 256
+
+  # Bound worst-case spend on this public, unauthenticated endpoint.
+  reserved_concurrent_executions = 10
 
   environment {
     variables = {

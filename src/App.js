@@ -26,6 +26,7 @@ const MAX_HISTORY = 50;
 const TRAINING_BATCH_SIZE = 25;
 const AUTO_SAVE_DEBOUNCE_MS = 1500;
 const THEME_STORAGE_KEY = 'tiny-ml-game-theme';
+const SHORTCUTS_STORAGE_KEY = 'tiny-ml-game-shortcuts';
 
 const GameError = ({ message, onRetry }) => (
   <div
@@ -126,6 +127,21 @@ const App = () => {
   });
   const [activeTab, setActiveTab] = useState('game');
   const [tfBackend, setTfBackend] = useState('initializing');
+  // Single-key shortcuts need an off-switch (WCAG 2.1.4 Character Key Shortcuts).
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(() => {
+    try {
+      return window.localStorage.getItem(SHORTCUTS_STORAGE_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleShortcuts = useCallback((enabled) => {
+    setShortcutsEnabled(enabled);
+    try {
+      window.localStorage.setItem(SHORTCUTS_STORAGE_KEY, enabled ? 'on' : 'off');
+    } catch { /* ignore */ }
+  }, []);
 
   const telemetry = useTelemetry();
 
@@ -133,6 +149,15 @@ const App = () => {
   const autoSaveTimerRef = useRef(null);
   const userSetThemeRef = useRef(false);
   const resultRegionRef = useRef(null);
+  // Latest history, readable synchronously. handlePlayerMove is async, so two
+  // overlapping calls would otherwise both build on the same stale closure
+  // and the second would silently discard the first round.
+  const gameHistoryRef = useRef(gameHistory);
+  const roundIdRef = useRef(0);
+
+  useEffect(() => {
+    gameHistoryRef.current = gameHistory;
+  }, [gameHistory]);
 
   // Add data persistence
   const { clearStorage } = useGameStorage(gameHistory, setGameHistory);
@@ -201,7 +226,7 @@ const App = () => {
       let loadedModel = null;
       if (!forceNew) {
         try {
-          loadedModel = await loadModel();
+          loadedModel = await loadModel(modelArch);
         } catch (err) {
           // No saved model — fall through to creating a new one.
         }
@@ -233,7 +258,7 @@ const App = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [createAdvancedModel, loadModel]);
+  }, [createAdvancedModel, loadModel, modelArch]);
 
   // Initialize model on mount only
   useEffect(() => {
@@ -370,7 +395,7 @@ const App = () => {
         // Debounced auto-save: collapse rapid bursts into one write.
         if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = setTimeout(() => {
-          saveModel(model);
+          saveModel(model, modelArch);
           autoSaveTimerRef.current = null;
         }, AUTO_SAVE_DEBOUNCE_MS);
       }
@@ -379,7 +404,7 @@ const App = () => {
     } finally {
       setIsTraining(false);
     }
-  }, [model, isTraining, saveModel]);
+  }, [model, isTraining, saveModel, modelArch]);
 
   const handlePlayerMove = useCallback(async (move) => {
     setPlayerMove(move);
@@ -432,21 +457,26 @@ const App = () => {
 
     setMessage(resultMessage);
 
-    const newHistory = [...gameHistory, {
+    const newHistory = [...gameHistoryRef.current, {
       playerMove: move,
       aiMove: aiChoice,
       result,
       timestamp: new Date().toLocaleTimeString(),
-      id: Date.now(),
+      id: `${Date.now()}-${(roundIdRef.current += 1)}`,
     }];
     const trimmedHistory = newHistory.length > MAX_HISTORY
       ? newHistory.slice(-MAX_HISTORY)
       : newHistory;
 
+    gameHistoryRef.current = trimmedHistory;
     setGameHistory(trimmedHistory);
 
     // Anonymous telemetry (only if user opted in via consent banner).
+    // The Lambda requires playerMove/aiMove/result at top level.
     telemetry.recordRound({
+      playerMove: move,
+      aiMove: aiChoice,
+      result,
       sequence: trimmedHistory.slice(-6).map((g) => ({
         playerMove: g.playerMove,
         aiMove: g.aiMove,
@@ -461,13 +491,16 @@ const App = () => {
     }
   }, [aiStrategy, gameHistory, predictNextMove, trainModel, telemetry, modelArch]);
 
-  // Keyboard shortcuts: R / P / S to play. Ignore when typing in inputs or when busy.
+  // Keyboard shortcuts: R / P / S to play. Active only on the game tab with no
+  // modal open, can be turned off entirely (WCAG 2.1.4), and must not swallow
+  // typing in form controls (including the arch <select>'s type-ahead).
   useEffect(() => {
     const handler = (e) => {
-      if (isLoading) return;
+      if (isLoading || e.repeat || !shortcutsEnabled) return;
+      if (activeTab !== 'game' || strategyInfoOpen) return;
       const target = e.target;
       const tag = target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
       const map = { r: 'Rock', p: 'Paper', s: 'Scissors' };
@@ -478,7 +511,7 @@ const App = () => {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handlePlayerMove, isLoading]);
+  }, [handlePlayerMove, isLoading, shortcutsEnabled, activeTab, strategyInfoOpen]);
 
   const stats = useMemo(() => {
     if (gameHistory.length === 0) {
@@ -641,6 +674,18 @@ const App = () => {
                 <span className="text-lg font-medium">{move}</span>
               </button>
             ))}
+          </div>
+
+          <div className="flex justify-center mb-6 -mt-2">
+            <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                type="checkbox"
+                checked={shortcutsEnabled}
+                onChange={(e) => toggleShortcuts(e.target.checked)}
+                className="w-4 h-4 accent-blue-600 rounded focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-300"
+              />
+              Keyboard shortcuts (R / P / S)
+            </label>
           </div>
 
           {playerMove && aiMove && (
@@ -826,9 +871,9 @@ const App = () => {
                 <>
                   <button
                     type="button"
-                    onClick={() => saveModel(model)}
+                    onClick={() => saveModel(model, modelArch)}
                     disabled={!model || isSaving || isTraining}
-                    className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-green-300 motion-safe:transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 bg-green-700 text-white rounded-lg hover:bg-green-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-green-300 motion-safe:transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSaving ? '💾 Saving...' : '💾 Save Model'}
                   </button>
@@ -840,7 +885,7 @@ const App = () => {
                         initializeModel(true);
                       }}
                       disabled={isLoadingModel}
-                      className="w-full px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-300 motion-safe:transition-colors font-medium disabled:opacity-50"
+                      className="w-full px-4 py-3 bg-orange-700 text-white rounded-lg hover:bg-orange-800 focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-300 motion-safe:transition-colors font-medium disabled:opacity-50"
                     >
                       <span aria-hidden="true">🗑️ </span>Delete Saved Model
                     </button>
@@ -849,7 +894,12 @@ const App = () => {
               )}
               <button
                 type="button"
-                onClick={() => initializeModel(true)}
+                onClick={async () => {
+                  // A reset must also discard the persisted model, or a
+                  // reload would resurrect the pre-reset weights.
+                  await deleteModel();
+                  initializeModel(true);
+                }}
                 className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-red-300 motion-safe:transition-colors font-medium"
               >
                 <span aria-hidden="true">🔄 </span>Reset AI Model

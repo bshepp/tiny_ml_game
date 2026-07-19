@@ -50,7 +50,7 @@ The model retrains on the last 25 rounds after every move you make. Predictions 
 
 ## Telemetry (opt-in)
 
-Disabled by default. The hosted build at [roshambot.briansheppard.com](https://roshambot.briansheppard.com) shows a consent banner the first time you play; declining keeps everything local. If you accept, each round sends `{sequence, strategy, modelArch, sessionId, schemaVersion, timestamp}` to a small AWS Lambda Function URL backed by DynamoDB with a 90-day TTL. No IP, no fingerprint, no cookies.
+Disabled by default. The hosted build at [roshambot.briansheppard.com](https://roshambot.briansheppard.com) shows a consent banner the first time you play; declining keeps everything local. If you accept, each round sends `{playerMove, aiMove, result, sequence, strategy, modelArch, sessionId, schemaVersion, timestamp}` to a small AWS Lambda Function URL backed by DynamoDB with a 90-day TTL. No IP, no fingerprint, no cookies.
 
 To run your own backend, see [infra/README.md](infra/README.md). Set `REACT_APP_TELEMETRY_URL` at build time to point the client at your Lambda Function URL.
 
@@ -74,7 +74,8 @@ src/
 │   ├── Tabs.js                     # Accessible tablist (roving tabindex)
 │   ├── StatsTab.js                 # Global stats dashboard
 │   ├── AboutTab.js                 # Project/runtime info, consent reset
-│   └── ConsentBanner.js            # Opt-in telemetry prompt
+│   ├── ConsentBanner.js            # Opt-in telemetry prompt
+│   └── StrategyInfoModal.js        # Strategy/architecture explainer dialog
 ├── hooks/
 │   ├── useGameStorage.js           # localStorage for game history
 │   ├── useModelStorage.js          # IndexedDB for trained model
@@ -96,7 +97,7 @@ See [CLAUDE.md](CLAUDE.md) for architecture deep-dives, accessibility notes, and
 
 ## Accessibility
 
-Built to WCAG 2.1 AA / Section 508. Highlights: skip link, real `radiogroup` for the strategy picker with full keyboard nav, R/P/S keyboard shortcuts, `role="status"` live region for results, dynamic `aria-label`s on move buttons, focus-visible rings tuned for both themes, motion-safe transitions, and AA-grade color contrast.
+Built to WCAG 2.1 AA / Section 508. Highlights: skip link, real `radiogroup` for the strategy picker with full keyboard nav, R/P/S keyboard shortcuts (scoped to the Game tab, with an on/off toggle per WCAG 2.1.4), a fully trapped modal dialog with focus restoration, `role="status"` live region for results, dynamic `aria-label`s on move buttons, focus-visible rings tuned for both themes, motion-safe transitions, and AA-grade color contrast.
 
 ## Roadmap
 

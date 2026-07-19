@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import App from './App';
 
 describe('App Component', () => {
@@ -109,6 +109,138 @@ describe('App Component', () => {
     const learningRadios = screen.getAllByRole('radio', { name: /learning/i });
     const strategyButton = learningRadios.find((btn) => btn.textContent.includes('Neural'));
     expect(strategyButton).toBeDisabled();
+  });
+
+  test('learning strategy is available once the model initializes', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /rock/i })).toBeEnabled();
+    });
+
+    // Model init must have succeeded: no error banner, and the learning
+    // strategy (the default) is selectable rather than "(model unavailable)".
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    const learningRadios = screen.getAllByRole('radio', { name: /learning/i });
+    const strategyButton = learningRadios.find((btn) => btn.textContent.includes('Neural'));
+    expect(strategyButton).toBeEnabled();
+    expect(strategyButton).not.toHaveTextContent(/model unavailable/i);
+  });
+
+  test('rapid successive moves are all recorded', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    // Two clicks before the first (async) round resolves — neither may be lost.
+    fireEvent.click(screen.getByRole('button', { name: /play rock/i }));
+    fireEvent.click(screen.getByRole('button', { name: /play scissors/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    });
+  });
+
+  test('holding a shortcut key down does not auto-repeat moves', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    fireEvent.keyDown(window, { key: 'r' });
+    fireEvent.keyDown(window, { key: 'r', repeat: true });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0);
+    });
+    // Let any (buggy) auto-repeated round land before asserting the count.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  test('shortcuts do not play while the strategy info modal is open', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /about ai strategies/i }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'r' });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }));
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  test('shortcuts do not play from other tabs', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /about/i }));
+    fireEvent.keyDown(window, { key: 'r' });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /game/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeInTheDocument();
+    });
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  test('typing in the architecture select does not play a move', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    const select = screen.getByLabelText(/neural model architecture/i);
+    select.focus();
+    fireEvent.keyDown(select, { key: 's' });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
+
+  test('keyboard shortcuts can be turned off and back on', async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /play rock/i })).toBeEnabled();
+    });
+
+    const toggle = screen.getByRole('checkbox', { name: /keyboard shortcuts/i });
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(toggle);
+    fireEvent.keyDown(window, { key: 'r' });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+
+    fireEvent.click(toggle);
+    fireEvent.keyDown(window, { key: 'r' });
+    await waitFor(() => {
+      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    });
   });
 
   test('has reset and clear buttons', async () => {

@@ -50,8 +50,13 @@ The DynamoDB table is deleted with all data. There is no S3 backup.
 
 ## API
 
-* `POST /round` — body: a single round object as above. Returns 204.
+* `POST /round` — body: a single round object as above (≤ 8 KB). Strictly
+  validated: enum fields, `sessionId` limited to `[A-Za-z0-9_-]{1,64}`,
+  `sequence` ≤ 10 entries each exactly `{playerMove, aiMove, result}`.
+  Returns 204; 400 on validation failure; 413 if oversized.
 * `GET  /stats` — returns aggregated counts for the last 7 days.
+
+Validation unit tests: `cd lambda && node --test`.
 
 CORS is restricted to `https://roshambot.briansheppard.com` and
 `http://localhost:3000` by default; edit `allowed_origins` in `main.tf` to add
@@ -61,4 +66,5 @@ more.
 
 DynamoDB is on-demand billing; Lambda is pay-per-invoke. At hobby traffic levels
 this should comfortably fit inside the AWS free tier. The TTL keeps the table
-from growing unbounded.
+from growing unbounded, and `reserved_concurrent_executions = 10` bounds
+worst-case spend on this public, unauthenticated endpoint.

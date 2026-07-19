@@ -43,15 +43,50 @@ const ARCH_DETAILS = {
 
 const StrategyInfoModal = ({ open, onClose }) => {
   const closeBtnRef = useRef(null);
+  const dialogRef = useRef(null);
+  const previouslyFocusedRef = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
+    previouslyFocusedRef.current = document.activeElement;
+
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      // aria-modal promises the background is inert — keep Tab inside the
+      // dialog so keyboard focus can't wander into the dimmed page.
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusables = dialogRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (!dialogRef.current.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', onKey);
     closeBtnRef.current?.focus();
-    return () => document.removeEventListener('keydown', onKey);
+
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+      previouslyFocusedRef.current?.focus?.();
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -62,6 +97,7 @@ const StrategyInfoModal = ({ open, onClose }) => {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="strategy-info-title"

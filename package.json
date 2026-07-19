@@ -28,6 +28,9 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build"
   },
+  "jest": {
+    "resetMocks": false
+  },
   "eslintConfig": {
     "extends": [
       "react-app",

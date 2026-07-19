@@ -18,6 +18,17 @@ const VALID_RESULTS = new Set(['win', 'loss', 'tie']);
 const VALID_STRATEGIES = new Set(['random', 'counter', 'pattern', 'learning']);
 const VALID_ARCHS = new Set(['dense', 'gru', 'transformer']);
 
+// Anything larger than this is not a legitimate round payload.
+export const MAX_BODY_BYTES = 8 * 1024;
+const SESSION_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+const isValidSequenceEntry = (e) =>
+  !!e && typeof e === 'object' && !Array.isArray(e) &&
+  Object.keys(e).length <= 3 &&
+  VALID_MOVES.has(e.playerMove) &&
+  VALID_MOVES.has(e.aiMove) &&
+  VALID_RESULTS.has(e.result);
+
 const corsHeaders = (origin) => {
   const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0] || '*';
   return {
@@ -42,16 +53,17 @@ const dayKey = (d) => {
   return `ROUND#${y}-${m}-${day}`;
 };
 
-const validateRound = (r) => {
+export const validateRound = (r) => {
   if (!r || typeof r !== 'object') return 'invalid body';
   if (!VALID_MOVES.has(r.playerMove)) return 'bad playerMove';
   if (!VALID_MOVES.has(r.aiMove)) return 'bad aiMove';
   if (!VALID_RESULTS.has(r.result)) return 'bad result';
   if (r.strategy && !VALID_STRATEGIES.has(r.strategy)) return 'bad strategy';
   if (r.modelArch && !VALID_ARCHS.has(r.modelArch)) return 'bad modelArch';
-  if (r.sessionId && (typeof r.sessionId !== 'string' || r.sessionId.length > 64)) return 'bad sessionId';
+  if (r.sessionId && (typeof r.sessionId !== 'string' || !SESSION_ID_RE.test(r.sessionId))) return 'bad sessionId';
   if (r.sequence && !Array.isArray(r.sequence)) return 'bad sequence';
   if (r.sequence && r.sequence.length > 10) return 'sequence too long';
+  if (r.sequence && !r.sequence.every(isValidSequenceEntry)) return 'bad sequence entry';
   return null;
 };
 
@@ -66,6 +78,9 @@ export const handler = async (event) => {
 
   try {
     if (method === 'POST' && path.endsWith('/round')) {
+      if ((event.body || '').length > MAX_BODY_BYTES) {
+        return json(413, { error: 'payload too large' }, origin);
+      }
       let body;
       try { body = JSON.parse(event.body || '{}'); }
       catch { return json(400, { error: 'invalid json' }, origin); }

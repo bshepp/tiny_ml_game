@@ -16,6 +16,9 @@ const safeGet = (k) => {
 const safeSet = (k, v) => {
   try { localStorage.setItem(k, v); } catch { /* no-op */ }
 };
+const safeRemove = (k) => {
+  try { localStorage.removeItem(k); } catch { /* no-op */ }
+};
 
 const randomId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -23,7 +26,9 @@ const randomId = () => {
 };
 
 export const useTelemetry = () => {
-  const [consent, setConsent] = useState(() => safeGet(CONSENT_KEY)); // 'granted' | 'denied' | null
+  // 'granted' | 'denied' | null. Normalize legacy ''/absent values to null
+  // so the consent banner's `consent === null` mount condition holds.
+  const [consent, setConsent] = useState(() => safeGet(CONSENT_KEY) || null);
   const sessionIdRef = useRef(null);
 
   if (sessionIdRef.current === null) {
@@ -46,7 +51,7 @@ export const useTelemetry = () => {
   }, []);
 
   const reset = useCallback(() => {
-    safeSet(CONSENT_KEY, '');
+    safeRemove(CONSENT_KEY);
     setConsent(null);
   }, []);
 

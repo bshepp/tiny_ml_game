@@ -27,6 +27,7 @@ Single-page React app. No routing, no backend. UI, ML wiring, and game state liv
 - **components/StatsTab.js** — Global stats dashboard, fetches from telemetry API; degrades gracefully when no API is configured
 - **components/AboutTab.js** — Project info, runtime info (TF.js backend), privacy notes, consent reset button
 - **components/ConsentBanner.js** — Fixed bottom-right opt-in prompt for anonymous telemetry
+- **components/StrategyInfoModal.js** — Dialog explaining strategies/architectures: `role="dialog"` + `aria-modal`, focus trap, Escape close, focus restoration to trigger, body scroll lock
 - **gameLogic.js** — Pure helpers: `MOVE_NAMES`, `MOVE_EMOJI`, `getCounterMove`, `getResult`, `encodeGameSequence`, `playerMoveEntropy`, sequence constants
 - **hooks/useGameStorage.js** — localStorage persistence for game history (with feature detection)
 - **hooks/useModelStorage.js** — IndexedDB persistence for trained TF.js model
@@ -49,7 +50,7 @@ Hidden: Dense(128, relu, L2, dropout 0.3)
 Output: Dense(3, softmax) → probability for Rock/Paper/Scissors
 ```
 
-Training: After each game in "learning" strategy, trains on the last 10 games with a 20% validation split. Each sample uses only the games that preceded it as context, so the label isn't leaked into the input.
+Training: In the "learning" strategy, once at least 25 rounds have been played (`TRAINING_BATCH_SIZE = 25`), each round triggers training on the last 25 games (3 epochs, 20% validation split). Each sample uses only the games that preceded it as context, so the label isn't leaked into the input.
 
 ### Prediction Sampling
 
@@ -61,7 +62,7 @@ Training: After each game in "learning" strategy, trains on the last 10 games wi
 2. `useGameStorage` loads saved game history from localStorage
 3. Player clicks move → `handlePlayerMove()`
 4. AI strategy calculates response (switch on `aiStrategy`)
-5. Result added to `gameHistory` (capped at 50)
+5. Result added to `gameHistory` (capped at 50) via a `gameHistoryRef` mirror, so overlapping async rounds build on the latest history instead of a stale closure
 6. If "learning" mode: `trainModel()` runs async after 100ms delay (trains on last `TRAINING_BATCH_SIZE = 25` games)
 7. Stats recompute via `useMemo` (`winRate`, `lift = winRate − 33`, `predictability` from `playerMoveEntropy`)
 8. History auto-saves to localStorage
@@ -85,7 +86,7 @@ const { xs, ys } = tf.tidy(() => ({
   ys: tf.tensor2d(labels),
 }));
 try {
-  await model.fit(xs, ys, { epochs: 5, validationSplit: 0.2 });
+  await model.fit(xs, ys, { epochs: 3, validationSplit: 0.2 });
 } finally {
   xs.dispose();
   ys.dispose();
@@ -131,7 +132,7 @@ A `<select id="model-arch-select">` directly above the strategy radiogroup lets 
 Disabled by default. Activates only when `REACT_APP_TELEMETRY_URL` is set at build time **and** the user clicks "Accept" on the consent banner.
 
 - `useTelemetry()` exposes `{consent, grant, deny, reset, recordRound, enabled, sessionId}`
-- After every round in `handlePlayerMove`, the app calls `telemetry.recordRound({sequence, strategy, modelArch})` — the hook adds `sessionId`, `schemaVersion`, and `timestamp` and fires-and-forgets via `fetch(..., {keepalive: true})`
+- After every round in `handlePlayerMove`, the app calls `telemetry.recordRound({playerMove, aiMove, result, sequence, strategy, modelArch})` — the hook adds `sessionId`, `schemaVersion`, and `timestamp` and fires-and-forgets via `fetch(..., {keepalive: true})`. The Lambda requires `playerMove`/`aiMove`/`result` at top level and strictly validates `sequence` entries (`src/App.telemetry.test.js` + `infra/lambda/index.test.mjs` pin both sides of the contract)
 - `ConsentBanner` is mounted only when `telemetry.enabled && telemetry.consent === null`
 - No IP, no fingerprint, no cookies. Backend stores rounds with a 90-day TTL (DynamoDB auto-deletes)
 
@@ -164,17 +165,19 @@ All color-bearing components ship matching `dark:` variants; transitions are gat
 - Loading spinner exposes `role="status"`
 - Strategy picker is a true `role="radiogroup"` with `role="radio"`/`aria-checked` items, roving `tabindex`, and full arrow-key + Home/End navigation (skipping disabled options)
 - Move buttons announce their keyboard shortcut: e.g. `aria-label="Play Rock (shortcut R)"`
-- Global R / P / S keyboard shortcuts (ignored when typing in an input/textarea/contenteditable or when modifier keys are held)
+- R / P / S keyboard shortcuts, scoped to the Game tab with no modal open; ignored while typing in form controls (input/textarea/select/contenteditable), on key auto-repeat, or with modifier keys held; a persisted checkbox toggle (`tiny-ml-game-shortcuts`) can turn them off entirely (WCAG 2.1.4 Character Key Shortcuts)
+- StrategyInfoModal traps Tab focus, closes on Escape, restores focus to its trigger, and locks background scroll while open
 - All interactive elements have `focus-visible:ring-4` rings tuned for both light and dark themes
 - Game history rendered as `<ul><li>` with descriptive `aria-label` per entry; emoji glyphs use `role="img" aria-label={moveName}`
-- Color contrast bumped to AA (e.g. move buttons `bg-blue-600` instead of `bg-blue-500`)
+- Color contrast bumped to AA (e.g. move buttons `bg-blue-600`; Save/Delete model buttons `bg-green-700`/`bg-orange-700` — both ≥ 4.5:1 with white text)
 
 ## Testing
 
 TensorFlow.js is mocked in `src/__mocks__/@tensorflow/tfjs.js` for Jest/JSDOM compatibility. The mock provides stub implementations for all TF.js APIs used in the app.
 
 Key test behaviors:
-- Model initialization fails in JSDOM (expected) — tests verify graceful degradation
+- `package.json` sets `"jest": {"resetMocks": false}` — CRA's default `resetMocks: true` strips the manual mock's implementations before every test, which silently fails model init and leaves every test running the degraded non-ML fallback
+- Model initialization succeeds against the mock; the degraded-fallback path is exercised deliberately via `mockImplementationOnce` forced failures
 - Tests use `fireEvent` (not `userEvent.setup()` — project uses @testing-library/user-event v13)
 - Console errors for TF.js and model initialization are suppressed in `setupTests.js`
 
@@ -182,18 +185,19 @@ Key test behaviors:
 
 The trained neural network model is saved to IndexedDB using TensorFlow.js's built-in model saving:
 
-- **Auto-save**: Model auto-saves every 10 games when using "learning" strategy
+- **Auto-save**: Debounced save 1.5 s after each successful training run in the "learning" strategy
 - **Manual save**: "Save Model" button in the UI
-- **Load on startup**: Automatically loads saved model if available
+- **Load on startup**: Automatically loads the saved model if one exists **and** its recorded architecture matches the selected one — all architectures share the single IndexedDB slot, so the metadata tags the slot with `arch` and `loadModel(expectedArch)` refuses a mismatch
+- **Reset**: "Reset AI Model" deletes the saved model before rebuilding, so a reload can't resurrect pre-reset weights
 - **Storage location**: IndexedDB (`indexeddb://tiny-ml-game-model`)
-- **Metadata**: Model metadata stored in localStorage (`tiny-ml-game-model-meta`)
+- **Metadata**: `{exists, lastSaved, arch}` in localStorage (`tiny-ml-game-model-meta`)
 
 ### useModelStorage Hook
 
 ```javascript
 const {
-  saveModel,         // Save current model to IndexedDB
-  loadModel,         // Load saved model (returns null if none)
+  saveModel,         // (model, arch) => save to IndexedDB; metadata records arch
+  loadModel,         // (expectedArch) => saved model, or null if none / arch mismatch
   deleteModel,       // Delete saved model
   checkModelExists,  // Sync hasSavedModel state with IndexedDB contents
   isSaving,          // Boolean: save in progress
@@ -206,8 +210,7 @@ const {
 ## Known Limitations
 
 - Training is synchronous and can briefly block UI on slower devices
-- App.js is still large (~700 lines) — pure logic now lives in `gameLogic.js`, but UI/state could benefit from further decomposition
-- TF.js model initialization has a CJS/ESM interop issue in JSDOM that causes fallback to non-ML mode in tests
+- App.js is still large (~1,000 lines) — pure logic now lives in `gameLogic.js`, but UI/state could benefit from further decomposition
 - Full `@tensorflow/tfjs` bundle is shipped (no per-backend split yet)
 
 ## Storage Hooks
