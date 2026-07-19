@@ -3,7 +3,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.60"
+      version = "~> 6.0"
     }
   }
 }
@@ -154,6 +154,18 @@ resource "aws_lambda_permission" "public_invoke_function_url" {
   function_name          = aws_lambda_function.api.function_name
   principal              = "*"
   function_url_auth_type = "NONE"
+}
+
+# Since October 2025, function URLs additionally require lambda:InvokeFunction
+# (scoped to URL calls via the InvokedViaFunctionUrl condition). Without this
+# second statement, every public request gets 403 AccessDeniedException.
+# https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+resource "aws_lambda_permission" "public_invoke_via_function_url" {
+  statement_id             = "AllowPublicInvokeViaFunctionUrl"
+  action                   = "lambda:InvokeFunction"
+  function_name            = aws_lambda_function.api.function_name
+  principal                = "*"
+  invoked_via_function_url = true
 }
 
 # ----- Outputs ---------------------------------------------------------------
