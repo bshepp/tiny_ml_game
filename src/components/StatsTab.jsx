@@ -74,7 +74,7 @@ const StatsTab = () => {
         </h2>
         <p>
           The global stats backend isn&apos;t configured for this build. Set the
-          <code className="mx-1 px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700">REACT_APP_TELEMETRY_URL</code>
+          <code className="mx-1 px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700">VITE_TELEMETRY_URL</code>
           environment variable at build time and deploy the AWS infra in
           <code className="mx-1 px-1 py-0.5 rounded bg-gray-200 dark:bg-gray-700">infra/</code>
           to enable it.

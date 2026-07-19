@@ -1,10 +1,11 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import * as tf from '@tensorflow/tfjs';
 import App from './App';
 
 describe('App Component', () => {
   beforeEach(() => {
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('renders game title', async () => {
@@ -94,7 +95,6 @@ describe('App Component', () => {
   test('disables learning strategy when model is unavailable', async () => {
     // Force model initialization to fail so we deterministically exercise
     // the fallback UI (rather than relying on an incidental JSDOM error).
-    const tf = require('@tensorflow/tfjs');
     tf.loadLayersModel.mockRejectedValueOnce(new Error('not found'));
     tf.sequential.mockImplementationOnce(() => {
       throw new Error('test: model unavailable');
@@ -256,7 +256,7 @@ describe('App Component', () => {
 describe('localStorage Integration', () => {
   beforeEach(() => {
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('can store and retrieve game data structure', () => {

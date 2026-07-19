@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   // Class-based dark mode so the user's explicit choice can override OS preference.
   darkMode: 'class',
   // No safelist needed: all dynamic classes (STAT_CARD_STYLES, STAT_VALUE_STYLES,

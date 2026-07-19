@@ -4,16 +4,16 @@ import { sendRound } from './api';
 
 // Mock the API module so telemetry is "configured" and we can inspect the
 // exact payload the app would POST to the Lambda.
-jest.mock('./api', () => ({
-  sendRound: jest.fn().mockResolvedValue({ ok: true }),
-  fetchStats: jest.fn().mockResolvedValue({}),
-  telemetryEnabled: jest.fn().mockReturnValue(true),
+vi.mock('./api', () => ({
+  sendRound: vi.fn().mockResolvedValue({ ok: true }),
+  fetchStats: vi.fn().mockResolvedValue({}),
+  telemetryEnabled: vi.fn().mockReturnValue(true),
 }));
 
 describe('Telemetry payload contract', () => {
   beforeEach(() => {
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('posts rounds matching the Lambda schema (top-level move fields)', async () => {

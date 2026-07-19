@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import * as tf from '@tensorflow/tfjs';
 import App from './App';
-
-const tf = require('@tensorflow/tfjs');
 
 const META_KEY = 'tiny-ml-game-model-meta';
 const MODEL_KEY = 'indexeddb://tiny-ml-game-model';
@@ -9,7 +8,7 @@ const MODEL_KEY = 'indexeddb://tiny-ml-game-model';
 describe('Model persistence and architecture identity', () => {
   beforeEach(() => {
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     tf.io.listModels.mockResolvedValue({});
   });
 

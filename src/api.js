@@ -1,7 +1,7 @@
 // Telemetry endpoint client. Configure via REACT_APP_TELEMETRY_URL.
 // Both endpoints are no-ops if the URL is not set (offline / no infra deployed).
 
-const BASE_URL = process.env.REACT_APP_TELEMETRY_URL || '';
+const BASE_URL = import.meta.env.VITE_TELEMETRY_URL || '';
 
 const isEnabled = () => Boolean(BASE_URL);
 

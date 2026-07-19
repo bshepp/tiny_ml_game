@@ -36,7 +36,7 @@ Then take the `function_url` output and either:
 
 1. Bake it into the production build:
    ```sh
-   REACT_APP_TELEMETRY_URL=https://<id>.lambda-url.us-east-1.on.aws npm run build
+   VITE_TELEMETRY_URL=https://<id>.lambda-url.us-east-1.on.aws npm run build
    ```
 2. Or commit it to `.env.production` (it's a public endpoint anyway).
 

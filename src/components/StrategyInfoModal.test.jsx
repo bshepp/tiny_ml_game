@@ -47,7 +47,7 @@ describe('StrategyInfoModal accessibility', () => {
   });
 
   test('closes on Escape', () => {
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     render(<StrategyInfoModal open onClose={onClose} />);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();

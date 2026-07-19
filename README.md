@@ -52,11 +52,11 @@ The model retrains on the last 25 rounds after every move you make. Predictions 
 
 Disabled by default. The hosted build at [roshambot.briansheppard.com](https://roshambot.briansheppard.com) shows a consent banner the first time you play; declining keeps everything local. If you accept, each round sends `{playerMove, aiMove, result, sequence, strategy, modelArch, sessionId, schemaVersion, timestamp}` to a small AWS Lambda Function URL backed by DynamoDB with a 90-day TTL. No IP, no fingerprint, no cookies.
 
-To run your own backend, see [infra/README.md](infra/README.md). Set `REACT_APP_TELEMETRY_URL` at build time to point the client at your Lambda Function URL.
+To run your own backend, see [infra/README.md](infra/README.md). Set `VITE_TELEMETRY_URL` at build time to point the client at your Lambda Function URL.
 
 ## Tech Stack
 
-- React 19 (Create React App)
+- React 19 + Vite (Vitest for tests)
 - TensorFlow.js 4.22
 - Tailwind CSS 3 (class-based dark mode)
 - AWS Lambda Function URL + DynamoDB (Terraform)
@@ -66,31 +66,31 @@ To run your own backend, see [infra/README.md](infra/README.md). Set `REACT_APP_
 
 ```
 src/
-├── App.js                          # Top-level component, tabs, model lifecycle, UI
+├── App.jsx                         # Top-level component, tabs, model lifecycle, UI
 ├── models.js                       # Model factory: dense / gru / transformer
 ├── api.js                          # Telemetry HTTP client (sendRound, fetchStats)
 ├── gameLogic.js                    # Pure helpers: encoding, outcomes, entropy
 ├── components/
-│   ├── Tabs.js                     # Accessible tablist (roving tabindex)
-│   ├── StatsTab.js                 # Global stats dashboard
-│   ├── AboutTab.js                 # Project/runtime info, consent reset
-│   ├── ConsentBanner.js            # Opt-in telemetry prompt
-│   └── StrategyInfoModal.js        # Strategy/architecture explainer dialog
+│   ├── Tabs.jsx                    # Accessible tablist (roving tabindex)
+│   ├── StatsTab.jsx                # Global stats dashboard
+│   ├── AboutTab.jsx                # Project/runtime info, consent reset
+│   ├── ConsentBanner.jsx           # Opt-in telemetry prompt
+│   └── StrategyInfoModal.jsx       # Strategy/architecture explainer dialog
 ├── hooks/
 │   ├── useGameStorage.js           # localStorage for game history
 │   ├── useModelStorage.js          # IndexedDB for trained model
 │   └── useTelemetry.js             # Consent + fire-and-forget round logging
-└── __mocks__/@tensorflow/tfjs.js   # TF.js mock for Jest/JSDOM
+└── __mocks__/@tensorflow/tfjs.js   # TF.js mock for Vitest/jsdom
 infra/                              # Terraform for AWS backend
 ```
 
 ## Development
 
 ```bash
-npm start       # Dev server at localhost:3000
-npm test        # Jest tests (TF.js mocked for JSDOM)
-npm run build   # Production build
-npm run deploy  # Publish ./build to gh-pages
+npm start       # Vite dev server at localhost:3000
+npm test        # Vitest (TF.js mocked for jsdom)
+npm run build   # Production build to ./dist
+npm run deploy  # Publish ./dist to gh-pages
 ```
 
 See [CLAUDE.md](CLAUDE.md) for architecture deep-dives, accessibility notes, and the design rationale behind decisions like the sampling strategy and model persistence.
@@ -108,13 +108,13 @@ Built to WCAG 2.1 AA / Section 508. Highlights: skip link, real `radiogroup` for
 - **HF Community blog post** — *"Three tiny architectures vs. human RPS players"*. Walks through the model design, the annealed-randomness sampling trick, aggregate win-rate results from the dataset, and a head-to-head against `iocaine powder` (the 1999 RoShamBo champion).
 - **AI vs AI vs `iocaine powder` mode** — let the three neural architectures and the classical bot play tournaments in-browser to feed the blog post a real comparison table.
 - **TF.js backend split + WebGPU** — ship per-backend bundles and try the WebGPU backend for faster training on capable browsers.
-- **CRA → Vite migration** — explore swapping the build pipeline; revert if the gains aren't worth the churn.
+- ~~**CRA → Vite migration**~~ — done: Vite 8 + Vitest 4 now power dev, build, and tests.
 - **React 19 polish** — adopt Actions and `use()` where they actually simplify code.
 
 ## Notes
 
 - The Learning AI runs entirely in-browser. If model initialization fails (rare; happens in some test environments), the game stays fully playable on the non-ML strategies.
-- TensorFlow.js is fully mocked in the Jest/JSDOM test suite.
+- TensorFlow.js is fully mocked in the Vitest/jsdom test suite.
 - Built and iterated on with GitHub Copilot / Claude over a long stretch of weekends.
 
 ## License

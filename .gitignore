@@ -51,3 +51,6 @@ Thumbs.db
 # Lambda invoke artifacts
 /out.json
 /payload.json
+
+# Vite build output
+/dist

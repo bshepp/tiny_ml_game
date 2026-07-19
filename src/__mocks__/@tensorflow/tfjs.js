@@ -1,130 +1,167 @@
-// Mock TensorFlow.js for Jest/JSDOM environment
-// This allows tests to run without WebGL/WebAssembly
+// Mock TensorFlow.js for the Vitest/jsdom environment.
+// Wired up via the `test.alias` entry in vite.config.js, so both the app and
+// the tests receive this module (and share its mock state) when importing
+// '@tensorflow/tfjs'. The real package is only used in the browser build.
+
+import { vi } from 'vitest';
 
 const createMockTensor = (shape = [1, 1]) => ({
   shape,
   dtype: 'float32',
-  dispose: jest.fn(),
-  data: jest.fn().mockResolvedValue(new Float32Array([0.33, 0.33, 0.34])),
-  arraySync: jest.fn().mockReturnValue([[0.33, 0.33, 0.34]]),
-  dataSync: jest.fn().mockReturnValue(new Float32Array([0.33, 0.33, 0.34])),
+  dispose: vi.fn(),
+  data: vi.fn().mockResolvedValue(new Float32Array([0.33, 0.33, 0.34])),
+  arraySync: vi.fn().mockReturnValue([[0.33, 0.33, 0.34]]),
+  dataSync: vi.fn().mockReturnValue(new Float32Array([0.33, 0.33, 0.34])),
 });
 
 const createMockModel = () => {
   const model = {
-    add: jest.fn(),
-    predict: jest.fn().mockReturnValue(createMockTensor([1, 3])),
-    fit: jest.fn().mockResolvedValue({
+    add: vi.fn(),
+    predict: vi.fn().mockReturnValue(createMockTensor([1, 3])),
+    fit: vi.fn().mockResolvedValue({
       history: {
         loss: [0.5, 0.4, 0.3],
         accuracy: [0.6, 0.7, 0.8],
         acc: [0.6, 0.7, 0.8],
       },
     }),
-    compile: jest.fn(),
-    dispose: jest.fn(),
-    save: jest.fn().mockResolvedValue({ modelArtifactsInfo: { dateSaved: new Date() } }),
-    getWeights: jest.fn().mockReturnValue([]),
-    setWeights: jest.fn(),
-    summary: jest.fn(),
+    compile: vi.fn(),
+    dispose: vi.fn(),
+    save: vi.fn().mockResolvedValue({ modelArtifactsInfo: { dateSaved: new Date() } }),
+    getWeights: vi.fn().mockReturnValue([]),
+    setWeights: vi.fn(),
+    summary: vi.fn(),
     layers: [],
   };
   return model;
 };
 
 const mockLayer = {
-  apply: jest.fn(function () { return this; }),
-  getWeights: jest.fn().mockReturnValue([]),
-  setWeights: jest.fn(),
+  apply: vi.fn(function () { return this; }),
+  getWeights: vi.fn().mockReturnValue([]),
+  setWeights: vi.fn(),
 };
 
 // Create the mock tf object
 const tf = {
   // Ready function
-  ready: jest.fn().mockResolvedValue(true),
+  ready: vi.fn().mockResolvedValue(true),
 
   // Tensor creation
-  tensor: jest.fn((data, shape) => createMockTensor(shape)),
-  tensor1d: jest.fn((data) => createMockTensor([data?.length || 1])),
-  tensor2d: jest.fn((data, shape) => createMockTensor(shape || [1, data?.[0]?.length || 1])),
-  zeros: jest.fn((shape) => createMockTensor(shape)),
-  ones: jest.fn((shape) => createMockTensor(shape)),
-  scalar: jest.fn(() => createMockTensor([1])),
+  tensor: vi.fn((data, shape) => createMockTensor(shape)),
+  tensor1d: vi.fn((data) => createMockTensor([data?.length || 1])),
+  tensor2d: vi.fn((data, shape) => createMockTensor(shape || [1, data?.[0]?.length || 1])),
+  zeros: vi.fn((shape) => createMockTensor(shape)),
+  ones: vi.fn((shape) => createMockTensor(shape)),
+  scalar: vi.fn(() => createMockTensor([1])),
 
   // Model creation
-  sequential: jest.fn(() => createMockModel()),
-  model: jest.fn(() => createMockModel()),
-  loadLayersModel: jest.fn().mockResolvedValue(createMockModel()),
+  sequential: vi.fn(() => createMockModel()),
+  model: vi.fn(() => createMockModel()),
+  loadLayersModel: vi.fn().mockResolvedValue(createMockModel()),
 
   // Layers
   layers: {
-    dense: jest.fn(() => mockLayer),
-    dropout: jest.fn(() => mockLayer),
-    flatten: jest.fn(() => mockLayer),
-    conv2d: jest.fn(() => mockLayer),
-    maxPooling2d: jest.fn(() => mockLayer),
-    batchNormalization: jest.fn(() => mockLayer),
-    layerNormalization: jest.fn(() => mockLayer),
-    lstm: jest.fn(() => mockLayer),
-    gru: jest.fn(() => mockLayer),
-    reshape: jest.fn(() => mockLayer),
-    add: jest.fn(() => mockLayer),
-    attention: jest.fn(() => mockLayer),
-    globalAveragePooling1d: jest.fn(() => mockLayer),
+    dense: vi.fn(() => mockLayer),
+    dropout: vi.fn(() => mockLayer),
+    flatten: vi.fn(() => mockLayer),
+    conv2d: vi.fn(() => mockLayer),
+    maxPooling2d: vi.fn(() => mockLayer),
+    batchNormalization: vi.fn(() => mockLayer),
+    layerNormalization: vi.fn(() => mockLayer),
+    lstm: vi.fn(() => mockLayer),
+    gru: vi.fn(() => mockLayer),
+    reshape: vi.fn(() => mockLayer),
+    add: vi.fn(() => mockLayer),
+    attention: vi.fn(() => mockLayer),
+    globalAveragePooling1d: vi.fn(() => mockLayer),
   },
 
   // Symbolic input + functional API
-  input: jest.fn(() => mockLayer),
+  input: vi.fn(() => mockLayer),
 
   // Regularizers
   regularizers: {
-    l1: jest.fn(() => ({})),
-    l2: jest.fn(() => ({})),
-    l1l2: jest.fn(() => ({})),
+    l1: vi.fn(() => ({})),
+    l2: vi.fn(() => ({})),
+    l1l2: vi.fn(() => ({})),
   },
 
   // Optimizers
   train: {
-    adam: jest.fn(() => ({})),
-    sgd: jest.fn(() => ({})),
-    rmsprop: jest.fn(() => ({})),
-    adagrad: jest.fn(() => ({})),
+    adam: vi.fn(() => ({})),
+    sgd: vi.fn(() => ({})),
+    rmsprop: vi.fn(() => ({})),
+    adagrad: vi.fn(() => ({})),
   },
 
   // Memory management
-  dispose: jest.fn(),
-  disposeVariables: jest.fn(),
-  tidy: jest.fn((fn) => fn()),
-  keep: jest.fn((tensor) => tensor),
-  memory: jest.fn(() => ({ numTensors: 0, numBytes: 0 })),
+  dispose: vi.fn(),
+  disposeVariables: vi.fn(),
+  tidy: vi.fn((fn) => fn()),
+  keep: vi.fn((tensor) => tensor),
+  memory: vi.fn(() => ({ numTensors: 0, numBytes: 0 })),
 
   // Math operations
-  add: jest.fn(() => createMockTensor()),
-  sub: jest.fn(() => createMockTensor()),
-  mul: jest.fn(() => createMockTensor()),
-  div: jest.fn(() => createMockTensor()),
-  matMul: jest.fn(() => createMockTensor()),
-  softmax: jest.fn(() => createMockTensor()),
-  argMax: jest.fn(() => createMockTensor()),
+  add: vi.fn(() => createMockTensor()),
+  sub: vi.fn(() => createMockTensor()),
+  mul: vi.fn(() => createMockTensor()),
+  div: vi.fn(() => createMockTensor()),
+  matMul: vi.fn(() => createMockTensor()),
+  softmax: vi.fn(() => createMockTensor()),
+  argMax: vi.fn(() => createMockTensor()),
 
   // Backend
-  setBackend: jest.fn().mockResolvedValue(true),
-  getBackend: jest.fn(() => 'cpu'),
-  backend: jest.fn(() => ({})),
+  setBackend: vi.fn().mockResolvedValue(true),
+  getBackend: vi.fn(() => 'cpu'),
+  backend: vi.fn(() => ({})),
 
   // IO handlers for model saving/loading
   io: {
-    browserHTTPRequest: jest.fn(),
-    browserDownloads: jest.fn(),
-    browserLocalStorage: jest.fn(),
-    indexedDB: jest.fn(),
-    withSaveHandler: jest.fn(),
-    withLoadHandler: jest.fn(),
-    listModels: jest.fn().mockResolvedValue({}),
-    removeModel: jest.fn().mockResolvedValue(true),
+    browserHTTPRequest: vi.fn(),
+    browserDownloads: vi.fn(),
+    browserLocalStorage: vi.fn(),
+    indexedDB: vi.fn(),
+    withSaveHandler: vi.fn(),
+    withLoadHandler: vi.fn(),
+    listModels: vi.fn().mockResolvedValue({}),
+    removeModel: vi.fn().mockResolvedValue(true),
   },
 };
 
-module.exports = tf;
-module.exports.__esModule = true;
-module.exports.default = tf;
+export default tf;
+
+// `import * as tf from '@tensorflow/tfjs'` consumes named exports, so mirror
+// every key of the mock object as a named export.
+export const {
+  ready,
+  tensor,
+  tensor1d,
+  tensor2d,
+  zeros,
+  ones,
+  scalar,
+  sequential,
+  model,
+  loadLayersModel,
+  layers,
+  input,
+  regularizers,
+  train,
+  dispose,
+  disposeVariables,
+  tidy,
+  keep,
+  memory,
+  add,
+  sub,
+  mul,
+  div,
+  matMul,
+  softmax,
+  argMax,
+  setBackend,
+  getBackend,
+  backend,
+  io,
+} = tf;

@@ -5,35 +5,36 @@ Development guide for the Rock Paper Scissors ML game.
 ## Commands
 
 ```bash
-npm start       # Dev server at localhost:3000
-npm test        # Jest tests (TF.js mocked for JSDOM)
-npm run build   # Production build
-npm run deploy  # Deploy to GitHub Pages
+npm start       # Vite dev server at localhost:3000 (alias: npm run dev)
+npm test        # Vitest, single run (watch mode: npm run test:watch)
+npm run build   # Production build to dist/
+npm run preview # Serve the production build locally
+npm run deploy  # Deploy dist/ to GitHub Pages
 ```
 
 ## Architecture
 
-Single-page React app. No routing, no backend. UI, ML wiring, and game state live in `src/App.js`. Pure logic helpers extracted to `src/gameLogic.js`.
+Single-page React app built with Vite (Vitest for tests). No routing, no backend. UI, ML wiring, and game state live in `src/App.jsx`. Pure logic helpers extracted to `src/gameLogic.js`. JSX-bearing files use the `.jsx` extension; pure-logic modules stay `.js`.
 
 ### Key Files
 
-- **App.js** — Main component: tabs (Game/Stats/About), model lifecycle (per arch), game state, AI strategies, theme, telemetry wiring, UI rendering
+- **App.jsx** — Main component: tabs (Game/Stats/About), model lifecycle (per arch), game state, AI strategies, theme, telemetry wiring, UI rendering
 - **models.js** — Model factory: `MODEL_ARCHITECTURES`, `ARCH_LABELS`, `ARCH_DESCRIPTIONS`, `createModel(arch)`. Three architectures share the same 15-feature input and 3-class softmax output:
   - `dense` — original 128→64→32→3 MLP with L2+dropout
   - `gru` — reshape to (5,3) → GRU(32) → dense(16) → dense(3)
   - `transformer` — functional-API self-attention (single head, d_model=8): Q/K/V dense → scaled dot-product (`tf.layers.dot` + softmax) → residual+layerNorm → feed-forward → residual+layerNorm → globalAveragePooling1d → dense(3)
-- **api.js** — Telemetry HTTP client. `sendRound(payload)`, `fetchStats()`, `telemetryEnabled()`. All no-op when `REACT_APP_TELEMETRY_URL` is unset.
-- **components/Tabs.js** — Accessible tablist with roving tabindex + arrow-key navigation
-- **components/StatsTab.js** — Global stats dashboard, fetches from telemetry API; degrades gracefully when no API is configured
-- **components/AboutTab.js** — Project info, runtime info (TF.js backend), privacy notes, consent reset button
-- **components/ConsentBanner.js** — Fixed bottom-right opt-in prompt for anonymous telemetry
-- **components/StrategyInfoModal.js** — Dialog explaining strategies/architectures: `role="dialog"` + `aria-modal`, focus trap, Escape close, focus restoration to trigger, body scroll lock
+- **api.js** — Telemetry HTTP client. `sendRound(payload)`, `fetchStats()`, `telemetryEnabled()`. All no-op when `VITE_TELEMETRY_URL` is unset.
+- **components/Tabs.jsx** — Accessible tablist with roving tabindex + arrow-key navigation
+- **components/StatsTab.jsx** — Global stats dashboard, fetches from telemetry API; degrades gracefully when no API is configured
+- **components/AboutTab.jsx** — Project info, runtime info (TF.js backend), privacy notes, consent reset button
+- **components/ConsentBanner.jsx** — Fixed bottom-right opt-in prompt for anonymous telemetry
+- **components/StrategyInfoModal.jsx** — Dialog explaining strategies/architectures: `role="dialog"` + `aria-modal`, focus trap, Escape close, focus restoration to trigger, body scroll lock
 - **gameLogic.js** — Pure helpers: `MOVE_NAMES`, `MOVE_EMOJI`, `getCounterMove`, `getResult`, `encodeGameSequence`, `playerMoveEntropy`, sequence constants
 - **hooks/useGameStorage.js** — localStorage persistence for game history (with feature detection)
 - **hooks/useModelStorage.js** — IndexedDB persistence for trained TF.js model
 - **hooks/useTelemetry.js** — Consent state (`tiny-ml-game-consent`), stable session id (`tiny-ml-game-session-id`), `recordRound(payload)` fire-and-forget
 - **infra/** — Terraform for AWS Lambda Function URL + DynamoDB. See `infra/README.md`.
-- **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Jest/JSDOM tests (extended with `tf.input`, `layerNormalization`, `reshape`, `add`, `softmax`, `dot`, `globalAveragePooling1d`, chainable `apply` for the functional API)
+- **\_\_mocks\_\_/@tensorflow/tfjs.js** — Full TF.js mock for Vitest/jsdom tests, applied via the `test.alias` entry in `vite.config.js` (extended with `tf.input`, `layerNormalization`, `reshape`, `add`, `softmax`, `dot`, `globalAveragePooling1d`, chainable `apply` for the functional API)
 
 ### Neural Network
 
@@ -105,14 +106,14 @@ const MOVE_EMOJI = { Rock: '🗿', Paper: '📄', Scissors: '✂️' };
 
 ### Tailwind Note
 
-Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings (see `STAT_CARD_STYLES` / `STAT_VALUE_STYLES` in App.js) where each map value is a complete literal class string. Tailwind's JIT scans those literals directly, so no `safelist` is needed.
+Dynamic class names like `bg-${color}-50` don't work with Tailwind JIT. Use static class mappings (see `STAT_CARD_STYLES` / `STAT_VALUE_STYLES` in App.jsx) where each map value is a complete literal class string. Tailwind's JIT scans those literals directly, so no `safelist` is needed.
 
 ## Tabs
 
-The main UI is split into three tabs (`activeTab` state in `App.js`, rendered by `components/Tabs.js`):
+The main UI is split into three tabs (`activeTab` state in `App.jsx`, rendered by `components/Tabs.jsx`):
 
 - **🎮 Game** — the playable interface (existing UI)
-- **🌍 Global Stats** — `StatsTab` fetches `${REACT_APP_TELEMETRY_URL}/stats` and renders aggregate counts, outcomes, move distribution, win rate by strategy, and win rate by model architecture. Shows a friendly "telemetry not configured" message when `REACT_APP_TELEMETRY_URL` is empty.
+- **🌍 Global Stats** — `StatsTab` fetches `${VITE_TELEMETRY_URL}/stats` and renders aggregate counts, outcomes, move distribution, win rate by strategy, and win rate by model architecture. Shows a friendly "telemetry not configured" message when `VITE_TELEMETRY_URL` is empty.
 - **ℹ️ About** — `AboutTab` shows project info, the active TF.js backend, telemetry status, and a "Reset consent" button.
 
 Each tab panel is a `role="tabpanel"` with `id="tabpanel-{id}"` matching the `aria-controls` on the tab.
@@ -129,7 +130,7 @@ A `<select id="model-arch-select">` directly above the strategy radiogroup lets 
 
 ## Telemetry (opt-in)
 
-Disabled by default. Activates only when `REACT_APP_TELEMETRY_URL` is set at build time **and** the user clicks "Accept" on the consent banner.
+Disabled by default. Activates only when `VITE_TELEMETRY_URL` is set at build time **and** the user clicks "Accept" on the consent banner.
 
 - `useTelemetry()` exposes `{consent, grant, deny, reset, recordRound, enabled, sessionId}`
 - After every round in `handlePlayerMove`, the app calls `telemetry.recordRound({playerMove, aiMove, result, sequence, strategy, modelArch})` — the hook adds `sessionId`, `schemaVersion`, and `timestamp` and fires-and-forgets via `fetch(..., {keepalive: true})`. The Lambda requires `playerMove`/`aiMove`/`result` at top level and strictly validates `sequence` entries (`src/App.telemetry.test.js` + `infra/lambda/index.test.mjs` pin both sides of the contract)
@@ -173,13 +174,14 @@ All color-bearing components ship matching `dark:` variants; transitions are gat
 
 ## Testing
 
-TensorFlow.js is mocked in `src/__mocks__/@tensorflow/tfjs.js` for Jest/JSDOM compatibility. The mock provides stub implementations for all TF.js APIs used in the app.
+Tests run under Vitest (`globals: true`, jsdom environment — see the `test` block in `vite.config.js`). TensorFlow.js is mocked in `src/__mocks__/@tensorflow/tfjs.js`, routed to all imports via `test.alias` (Vitest has no Jest-style automocking from `__mocks__` directories). The mock provides stub implementations for all TF.js APIs used in the app.
 
 Key test behaviors:
-- `package.json` sets `"jest": {"resetMocks": false}` — CRA's default `resetMocks: true` strips the manual mock's implementations before every test, which silently fails model init and leaves every test running the degraded non-ML fallback
+- Vitest keeps mock implementations between tests by default (no `resetMocks` override needed, unlike CRA's Jest config)
 - Model initialization succeeds against the mock; the degraded-fallback path is exercised deliberately via `mockImplementationOnce` forced failures
 - Tests use `fireEvent` (not `userEvent.setup()` — project uses @testing-library/user-event v13)
 - Console errors for TF.js and model initialization are suppressed in `setupTests.js`
+- The Lambda's validation tests are separate: `cd infra/lambda && node --test` (excluded from Vitest via the `include` pattern)
 
 ## Model Persistence
 
@@ -210,7 +212,7 @@ const {
 ## Known Limitations
 
 - Training is synchronous and can briefly block UI on slower devices
-- App.js is still large (~1,000 lines) — pure logic now lives in `gameLogic.js`, but UI/state could benefit from further decomposition
+- App.jsx is still large (~1,000 lines) — pure logic now lives in `gameLogic.js`, but UI/state could benefit from further decomposition
 - Full `@tensorflow/tfjs` bundle is shipped (no per-backend split yet)
 
 ## Storage Hooks
@@ -221,7 +223,7 @@ Both `useGameStorage` and `useModelStorage` feature-detect localStorage availabi
 
 ## Test Setup
 
-`src/setupTests.js` polyfills `window.matchMedia` (used by the theme system) with a plain (non-`jest.fn`) implementation so that `jest.clearAllMocks()` calls in test suites don't strip the implementation out.
+`src/setupTests.js` polyfills `window.matchMedia` (used by the theme system) with a plain (non-`vi.fn`) implementation so that `vi.clearAllMocks()` calls in test suites don't strip the implementation out.
 
 ## Adding Features
 
@@ -238,12 +240,12 @@ Both `useGameStorage` and `useModelStorage` feature-detect localStorage availabi
 
 Public-facing roadmap lives in `README.md`. Implementation notes for each item:
 
-- **Section 508 / WCAG 2.1 AA conformance statement** — current implementation already covers AA (skip link, radiogroup semantics, keyboard shortcuts, AA contrast, motion-safe transitions). To formalize: add a VPAT-style statement page (likely a new `components/AccessibilityTab.js` or a section inside `AboutTab`), and wire `@axe-core/react` (dev-only) plus `jest-axe` smoke tests in CI so AA regressions fail the build.
+- **Section 508 / WCAG 2.1 AA conformance statement** — current implementation already covers AA (skip link, radiogroup semantics, keyboard shortcuts, AA contrast, motion-safe transitions). To formalize: add a VPAT-style statement page (likely a new `components/AccessibilityTab.js` or a section inside `AboutTab`), and wire `@axe-core/react` (dev-only) plus `vitest-axe` smoke tests in CI so AA regressions fail the build.
 - **AI-agent accessible** — ship `public/llms.txt` describing the game, the 15-feature encoding, telemetry schema (matching `useTelemetry` payload), and the `/stats` endpoint. Add a `public/.well-known/ai-plugin.json`-style manifest for agent discovery. Keep `robots.txt` allowing GPTBot/ClaudeBot/PerplexityBot. Make sure the static HTML still has meaningful `<meta>` and a server-rendered fallback summary so agents that don't run JS get something useful.
 - **Claude.ai / MCP accessible** — small MCP server (Node, deployed as a second Lambda Function URL or Cloudflare Worker) exposing tools like `get_aggregate_stats`, `get_winrate_by_arch`, `get_dataset_card`. List it in the Anthropic MCP registry once stable. The MCP server reads the same DynamoDB table the StatsTab hits, so no new data plane.
 - **HF dataset export** — DynamoDB → JSONL/Parquet job. Schema already matches what we'd publish: `{sessionId (hashed with random salt at export time), sequence, strategy, modelArch, schemaVersion, timestamp}`. Lambda or one-off `boto3` script under `infra/scripts/`. Dataset card needs explicit consent disclosure and a selection-bias caveat (only opt-in users).
 - **HF Community blog post** — outline drafted in chat: hook (humans aren't random) → 15-feature setup → three architectures side-by-side → annealed-randomness sampling rationale → aggregate win rates from telemetry → comparison with `iocaine powder` → dataset/repo links → limitations. Wait until ~500–1000 rounds across all three architectures before drafting.
 - **AI vs AI vs `iocaine powder` mode** — needs a tournament harness (probably `src/tournament.js`) that loops N rounds per matchup using each architecture's `predictNextMove` against the others and against a JS port of `iocaine powder`. Render a results matrix in a new tab or a sub-section of the Stats tab.
 - **TF.js backend split + WebGPU** — swap `@tensorflow/tfjs` for `@tensorflow/tfjs-core` + per-backend imports (`tfjs-backend-webgl`, `tfjs-backend-webgpu`). Detect WebGPU support and prefer it; fall back to WebGL. Surface the active backend in the About tab (already wired via `tfBackend`).
-- **CRA → Vite migration** — try a branch. Watch out for: Tailwind PostCSS config, `process.env.REACT_APP_*` → `import.meta.env.VITE_*`, `gh-pages -d dist`, and the TF.js mock path resolution.
+- **CRA → Vite migration** — ✅ done (Vite 8 + Vitest 4): `REACT_APP_*` → `VITE_*`, JSX files renamed to `.jsx`, TF.js mock wired via `test.alias`, deploy from `dist/`, dev server pinned to port 3000 for the Lambda CORS allowlist.
 - **React 19 polish** — Actions for the Save/Delete model buttons; `use()` for the StatsTab fetch (currently a custom effect). Keep the suspense boundary local so the rest of the tab still renders.
